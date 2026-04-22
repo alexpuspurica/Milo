@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.auth import require_login, render_sidebar_user
-from utils.db import get_weekly_plan, save_weekly_plan
+from utils.db import get_weekly_plan, save_weekly_plan, save_plan_exercise
 from utils.api import search_exercises
 
 require_login()
@@ -56,7 +56,9 @@ if query:
             with col1:
                 st.write(f"**{ex['name']}** — {ex['muscle_group']} ({ex['category']})")
             with col2:
-                st.button("Add", key=f"add_{ex['id']}")
+                if st.button("Add", key=f"add_{ex['id']}"):
+                    st.session_state["prefill_exercise"] = ex["name"]
+                    st.rerun()
 
 st.divider()
 
@@ -65,7 +67,8 @@ st.subheader("Add Exercise to Plan")
 st.write("Set the target sets, reps, and weight for an exercise.")
 
 with st.form("add_exercise_form"):
-    exercise_name = st.text_input("Exercise name")
+    prefill       = st.session_state.pop("prefill_exercise", "")
+    exercise_name = st.text_input("Exercise name", value=prefill)
     col1, col2, col3 = st.columns(3)
     with col1:
         sets = st.number_input("Sets", min_value=1, max_value=10, value=3)
@@ -81,4 +84,8 @@ if add_btn:
     if exercise_name.strip() == "":
         st.warning("Please enter an exercise name.")
     else:
-        st.success(f"Added **{exercise_name}** ({sets} × {reps} @ {weight} kg) to {day_for_exercise}.")
+        ok = save_plan_exercise(USER_ID, day_for_exercise, exercise_name.strip(), sets, reps, weight)
+        if ok:
+            st.success(f"Added **{exercise_name}** ({sets} × {reps} @ {weight} kg) to {day_for_exercise}.")
+        else:
+            st.error("Could not save exercise. Please try again.")

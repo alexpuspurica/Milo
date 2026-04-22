@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from utils.auth import require_login, render_sidebar_user
-from utils.db import get_all_exercises, get_exercise_history
+from utils.db import get_all_exercises, get_exercise_history, get_exercise_id
 
 require_login()
 render_sidebar_user()
@@ -17,10 +17,9 @@ if not exercises:
     st.info("No exercises found. Add exercises in Settings first.")
     st.stop()
 
-selected = st.selectbox("Select exercise", exercises)
-
-# use index 1 as a placeholder exercise_id — real implementation uses the actual ID
-history = get_exercise_history(USER_ID, exercise_id=1)
+selected    = st.selectbox("Select exercise", exercises)
+exercise_id = get_exercise_id(USER_ID, selected)
+history     = get_exercise_history(USER_ID, exercise_id) if exercise_id else pd.DataFrame()
 
 if history.empty:
     st.info(f"No session data yet for {selected}. Log some sessions first.")

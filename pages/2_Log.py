@@ -197,7 +197,7 @@ if st.button("Save Session", use_container_width=True, type="primary"):
                 "completed":         st.session_state.get(f"done_{name}_{i}", False),
             })
 
-    ok = save_session(USER_ID, 1, results)
+    ok = save_session(USER_ID, results)
     if ok:
         st.success("Session saved! Great work today.")
         # Clear all log state so the page is fresh for the next session
