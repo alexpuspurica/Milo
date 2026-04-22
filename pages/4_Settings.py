@@ -139,125 +139,125 @@ day_chosen = chosen_day != "— select a day —"
 
 if not day_chosen:
     st.caption("Select a day above to unlock the exercise search and prescription fields.")
-    st.stop()
 
-# --- Step 2: Exercise name ---
-st.markdown("<br>", unsafe_allow_html=True)
-st.markdown(
-    "<p style='font-size:0.72rem; color:#C4B5DC; font-weight:600; "
-    "text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.3rem;'>"
-    "Step 2 — Name the exercise</p>",
-    unsafe_allow_html=True,
-)
-
-name_col, search_col, search_btn_col = st.columns([3, 3, 1], gap="small")
-
-with name_col:
-    custom_name = st.text_input(
-        label       = "Exercise name",
-        placeholder = "e.g. Bench Press, RDL ...",
-        help        = "Type directly — new names are added to your library automatically.",
-        key         = "custom_exercise_name",
+if day_chosen:
+    # --- Step 2: Exercise name ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='font-size:0.72rem; color:#C4B5DC; font-weight:600; "
+        "text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.3rem;'>"
+        "Step 2 — Name the exercise</p>",
+        unsafe_allow_html=True,
     )
 
-with search_col:
-    search_query = st.text_input(
-        label       = "Or search exercise database",
-        placeholder = "Search wger API ...",
-        key         = "exercise_search",
-    )
+    name_col, search_col, search_btn_col = st.columns([3, 3, 1], gap="small")
 
-with search_btn_col:
-    st.markdown("<div style='height:1.8rem;'></div>", unsafe_allow_html=True)
-    search_clicked = st.button("Search", key="search_btn")
-
-if search_query or search_clicked:
-    results = search_exercises(search_query)
-    if results:
-        results_df = pd.DataFrame(results)[["name", "muscle_group", "category"]]
-        results_df.columns = ["Exercise", "Muscle Group", "Equipment"]
-        st.dataframe(results_df, use_container_width=True, hide_index=True)
-        result_names = [r["name"] for r in results]
-        api_chosen   = st.selectbox(
-            "Select to use as exercise name",
-            options = ["— pick one —"] + result_names,
-            key     = "chosen_exercise",
+    with name_col:
+        custom_name = st.text_input(
+            label       = "Exercise name",
+            placeholder = "e.g. Bench Press, RDL ...",
+            help        = "Type directly — new names are added to your library automatically.",
+            key         = "custom_exercise_name",
         )
-        if api_chosen and api_chosen != "— pick one —":
-            st.session_state["custom_exercise_name"] = api_chosen
-            st.rerun()
-    else:
-        st.info("No results — type a custom name in the Exercise name field.")
 
-chosen_name = custom_name.strip() if custom_name and custom_name.strip() else None
-
-# --- Step 3: Prescription + Progression ---
-st.markdown("<br>", unsafe_allow_html=True)
-st.markdown(
-    "<p style='font-size:0.72rem; color:#C4B5DC; font-weight:600; "
-    "text-transform:uppercase; letter-spacing:0.1em;'>"
-    "Step 3 — Prescription &amp; Progression</p>",
-    unsafe_allow_html=True,
-)
-
-presc_sets, presc_reps, presc_kg, prog_n, prog_kg_col = st.columns(
-    [2, 2, 2, 2, 2], gap="medium"
-)
-
-with presc_sets:
-    target_sets = st.number_input("Sets", min_value=1, max_value=20, value=3, step=1, key="target_sets")
-
-with presc_reps:
-    target_reps = st.number_input("Reps", min_value=1, max_value=50, value=10, step=1, key="target_reps")
-
-with presc_kg:
-    target_kg = st.number_input(
-        "Weight (kg)", min_value=0.0, max_value=500.0,
-        value=60.0, step=2.5, format="%.1f", key="target_kg",
-    )
-
-with prog_n:
-    progression_n = st.number_input(
-        "Every N sessions",
-        min_value=0, max_value=50, value=0, step=1, key="prog_n",
-        help="Auto-increase weight every N sessions. Set 0 to disable.",
-    )
-
-with prog_kg_col:
-    progression_kg = st.number_input(
-        "Increase by (kg)",
-        min_value=0.0, max_value=20.0, value=2.5, step=0.5,
-        format="%.1f", key="prog_kg",
-        help="How many kg to add when the progression triggers.",
-    )
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-if st.button("Add to Plan", key="add_exercise_btn"):
-    if chosen_name:
-        ok = save_plan_exercise(
-            user_id              = USER_ID,
-            day                  = chosen_day,
-            exercise_name        = chosen_name,
-            sets                 = int(target_sets),
-            reps                 = int(target_reps),
-            weight_kg            = float(target_kg),
-            progression_every_n  = int(progression_n),
-            progression_kg       = float(progression_kg),
+    with search_col:
+        search_query = st.text_input(
+            label       = "Or search exercise database",
+            placeholder = "Search wger API ...",
+            key         = "exercise_search",
         )
-        if ok:
-            prog_note = (
-                f"  Progression: +{progression_kg:.1f} kg every {progression_n} sessions."
-                if progression_n > 0 else ""
+
+    with search_btn_col:
+        st.markdown("<div style='height:1.8rem;'></div>", unsafe_allow_html=True)
+        search_clicked = st.button("Search", key="search_btn")
+
+    if search_query or search_clicked:
+        results = search_exercises(search_query)
+        if results:
+            results_df = pd.DataFrame(results)[["name", "muscle_group", "category"]]
+            results_df.columns = ["Exercise", "Muscle Group", "Equipment"]
+            st.dataframe(results_df, use_container_width=True, hide_index=True)
+            result_names = [r["name"] for r in results]
+            api_chosen   = st.selectbox(
+                "Select to use as exercise name",
+                options = ["— pick one —"] + result_names,
+                key     = "chosen_exercise",
             )
-            st.success(
-                f"**{chosen_name}** added to {chosen_day} — "
-                f"{int(target_sets)} x {int(target_reps)} @ {target_kg:.1f} kg.{prog_note}"
-            )
+            if api_chosen and api_chosen != "— pick one —":
+                st.session_state["custom_exercise_name"] = api_chosen
+                st.rerun()
         else:
-            st.error("Failed to save exercise. Please try again.")
-    else:
-        st.warning("Enter an exercise name in the field above before adding.")
+            st.info("No results — type a custom name in the Exercise name field.")
+
+    chosen_name = custom_name.strip() if custom_name and custom_name.strip() else None
+
+    # --- Step 3: Prescription + Progression ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='font-size:0.72rem; color:#C4B5DC; font-weight:600; "
+        "text-transform:uppercase; letter-spacing:0.1em;'>"
+        "Step 3 — Prescription &amp; Progression</p>",
+        unsafe_allow_html=True,
+    )
+
+    presc_sets, presc_reps, presc_kg, prog_n, prog_kg_col = st.columns(
+        [2, 2, 2, 2, 2], gap="medium"
+    )
+
+    with presc_sets:
+        target_sets = st.number_input("Sets", min_value=1, max_value=20, value=3, step=1, key="target_sets")
+
+    with presc_reps:
+        target_reps = st.number_input("Reps", min_value=1, max_value=50, value=10, step=1, key="target_reps")
+
+    with presc_kg:
+        target_kg = st.number_input(
+            "Weight (kg)", min_value=0.0, max_value=500.0,
+            value=60.0, step=2.5, format="%.1f", key="target_kg",
+        )
+
+    with prog_n:
+        progression_n = st.number_input(
+            "Every N sessions",
+            min_value=0, max_value=50, value=0, step=1, key="prog_n",
+            help="Auto-increase weight every N sessions. Set 0 to disable.",
+        )
+
+    with prog_kg_col:
+        progression_kg = st.number_input(
+            "Increase by (kg)",
+            min_value=0.0, max_value=20.0, value=2.5, step=0.5,
+            format="%.1f", key="prog_kg",
+            help="How many kg to add when the progression triggers.",
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    if st.button("Add to Plan", key="add_exercise_btn"):
+        if chosen_name:
+            ok = save_plan_exercise(
+                user_id              = USER_ID,
+                day                  = chosen_day,
+                exercise_name        = chosen_name,
+                sets                 = int(target_sets),
+                reps                 = int(target_reps),
+                weight_kg            = float(target_kg),
+                progression_every_n  = int(progression_n),
+                progression_kg       = float(progression_kg),
+            )
+            if ok:
+                prog_note = (
+                    f"  Progression: +{progression_kg:.1f} kg every {progression_n} sessions."
+                    if progression_n > 0 else ""
+                )
+                st.success(
+                    f"**{chosen_name}** added to {chosen_day} — "
+                    f"{int(target_sets)} x {int(target_reps)} @ {target_kg:.1f} kg.{prog_note}"
+                )
+            else:
+                st.error("Failed to save exercise. Please try again.")
+        else:
+            st.warning("Enter an exercise name in the field above before adding.")
 
 # ---------------------------------------------------------------------------
 # SECTION C: Live Plan Preview
@@ -341,3 +341,72 @@ st.markdown(
     "database and will be reflected on the Overview and Log pages immediately.</p>",
     unsafe_allow_html=True,
 )
+
+# ---------------------------------------------------------------------------
+# SECTION E: WHOOP Connection
+# ---------------------------------------------------------------------------
+import os
+from pathlib import Path
+
+_ENV_PATH = Path(__file__).parent.parent / ".env"
+
+def _read_whoop_env() -> dict:
+    """Return stored WHOOP credentials from .env, or empty strings if not set."""
+    creds = {"username": "", "password": ""}
+    if _ENV_PATH.exists():
+        for line in _ENV_PATH.read_text().splitlines():
+            if line.startswith("USERNAMEinENV="):
+                creds["username"] = line.split("=", 1)[1].strip()
+            elif line.startswith("PASSWORDinENV="):
+                creds["password"] = line.split("=", 1)[1].strip()
+    return creds
+
+st.markdown("---")
+st.subheader("WHOOP Connection")
+st.markdown(
+    "<p style='color:#C4B5DC; font-size:0.88rem; margin-bottom:1rem;'>"
+    "Connect your WHOOP account to enable automatic recovery tracking on the Overview page.</p>",
+    unsafe_allow_html=True,
+)
+
+_stored = _read_whoop_env()
+_connected = bool(_stored["username"] and _stored["password"])
+
+if _connected:
+    st.success(f"Connected as **{_stored['username']}**")
+else:
+    st.warning("Not connected — recovery score must be entered manually.")
+
+with st.form("whoop_form"):
+    whoop_email = st.text_input(
+        "WHOOP Email",
+        value=_stored["username"],
+        placeholder="you@example.com",
+    )
+    whoop_password = st.text_input(
+        "WHOOP Password",
+        type="password",
+        placeholder="Enter your WHOOP password",
+    )
+    col_save, col_clear = st.columns([3, 1])
+    with col_save:
+        save_whoop = st.form_submit_button("Save Credentials", use_container_width=True)
+    with col_clear:
+        clear_whoop = st.form_submit_button("Disconnect", use_container_width=True)
+
+if save_whoop:
+    if not whoop_email or not whoop_password:
+        st.error("Please enter both email and password.")
+    else:
+        _ENV_PATH.write_text(
+            f"USERNAMEinENV={whoop_email.strip()}\n"
+            f"PASSWORDinENV={whoop_password}\n"
+        )
+        st.success("WHOOP credentials saved. Recovery will sync automatically on the Overview page.")
+        st.rerun()
+
+if clear_whoop:
+    if _ENV_PATH.exists():
+        _ENV_PATH.unlink()
+    st.success("WHOOP disconnected.")
+    st.rerun()
