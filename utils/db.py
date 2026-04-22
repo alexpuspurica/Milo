@@ -1,28 +1,20 @@
 """
 utils/db.py — SQLite database helpers
 ======================================
-This module is the single point of contact between the Streamlit pages and the
-SQLite database that stores all user data (session logs and workout plans).
+Single point of contact between Streamlit pages and the milo.db SQLite file.
 
-Each function follows a consistent pattern:
-    1. Open a connection to `milo.db` (created automatically on first run).
-    2. Execute the relevant SQL query / write.
-    3. Close the connection and return a Python-native result.
-
-The stubs below return **hardcoded fake data** so that the UI can be built and
-tested before the real SQLite logic is implemented.  Replace the `return`
-statements with real SQL when the database schema is finalised.
-
-Database schema (planned)
---------------------------
+Schema
+------
     users(user_id, username, password_hash, salt, created_at)
-    exercises(exercise_id, name, muscle_group, wger_id)
-    weekly_plan(user_id, day_of_week, workout_name)
-    plan_exercises(user_id, day_of_week, exercise_id, sets, reps, weight_kg)
-    sessions(session_id, user_id, date, recovery_score)
-    sets_log(log_id, session_id, exercise_id, set_number, reps, weight_kg, completed)
+    exercises(exercise_id, user_id, name, muscle_group)
+    weekly_plan(plan_id, user_id, day_of_week, workout_name)
+    plan_exercises(id, user_id, day_of_week, exercise_id, sets, reps, weight_kg)
+    sessions(session_id, user_id, date, created_at)
+    sets_log(log_id, session_id, exercise_id, set_number,
+             planned_reps, planned_weight_kg, actual_reps, actual_weight_kg, completed)
 """
 
+import datetime
 import hashlib
 import os
 import secrets
@@ -31,7 +23,7 @@ import sqlite3
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Database path — sits at the project root alongside app.py
+# Database path
 # ---------------------------------------------------------------------------
 _MODULE_DIR   = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_MODULE_DIR)
@@ -39,15 +31,17 @@ _DB_PATH      = os.path.join(_PROJECT_ROOT, "milo.db")
 
 
 def _get_conn() -> sqlite3.Connection:
-    return sqlite3.connect(_DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(_DB_PATH, check_same_thread=False)
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 
 # ---------------------------------------------------------------------------
-# Schema initialisation — call once at app startup
+# Schema initialisation
 # ---------------------------------------------------------------------------
 
 def init_db() -> None:
-    """Create all tables if they don't exist yet."""
+    """Create all tables if they don't exist. Safe to call on every startup."""
     conn = _get_conn()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
@@ -57,13 +51,58 @@ def init_db() -> None:
             salt          TEXT NOT NULL,
             created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS exercises (
+            exercise_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL,
+            name         TEXT NOT NULL,
+            muscle_group TEXT DEFAULT '',
+            UNIQUE(user_id, name)
+        );
+
+        CREATE TABLE IF NOT EXISTS weekly_plan (
+            plan_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL,
+            day_of_week  TEXT NOT NULL,
+            workout_name TEXT NOT NULL,
+            UNIQUE(user_id, day_of_week)
+        );
+
+        CREATE TABLE IF NOT EXISTS plan_exercises (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            day_of_week TEXT NOT NULL,
+            exercise_id INTEGER NOT NULL,
+            sets        INTEGER NOT NULL,
+            reps        INTEGER NOT NULL,
+            weight_kg   REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL,
+            date       TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS sets_log (
+            log_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id        INTEGER NOT NULL,
+            exercise_id       INTEGER NOT NULL,
+            set_number        INTEGER NOT NULL,
+            planned_reps      INTEGER,
+            planned_weight_kg REAL,
+            actual_reps       INTEGER,
+            actual_weight_kg  REAL,
+            completed         INTEGER DEFAULT 1
+        );
     """)
     conn.commit()
     conn.close()
 
 
 # ---------------------------------------------------------------------------
-# Password helpers (never stored in plain text)
+# Password helpers
 # ---------------------------------------------------------------------------
 
 def _hash_password(password: str, salt: str) -> str:
@@ -77,10 +116,7 @@ def _hash_password(password: str, salt: str) -> str:
 # ---------------------------------------------------------------------------
 
 def verify_user(username: str, password: str) -> dict | None:
-    """
-    Check credentials. Returns {"user_id": int, "username": str} on success,
-    None if the username doesn't exist or the password is wrong.
-    """
+    """Returns {"user_id", "username"} on success, None on failure."""
     conn = _get_conn()
     row = conn.execute(
         "SELECT user_id, username, password_hash, salt FROM users WHERE username = ?",
@@ -96,10 +132,7 @@ def verify_user(username: str, password: str) -> dict | None:
 
 
 def create_user(username: str, password: str) -> bool:
-    """
-    Register a new user. Returns True on success, False if the username is
-    already taken. Called by the sign-up page.
-    """
+    """Register a new user. Returns False if the username is already taken."""
     salt          = secrets.token_hex(16)
     password_hash = _hash_password(password, salt)
     try:
@@ -112,204 +145,235 @@ def create_user(username: str, password: str) -> bool:
         conn.close()
         return True
     except sqlite3.IntegrityError:
-        return False  # username already taken
+        return False
 
 
 # ---------------------------------------------------------------------------
-# Read helpers
+# Exercise helpers
+# ---------------------------------------------------------------------------
+
+def _get_or_create_exercise(conn: sqlite3.Connection, user_id: int, name: str) -> int:
+    """Return exercise_id for (user_id, name), inserting a row if needed."""
+    row = conn.execute(
+        "SELECT exercise_id FROM exercises WHERE user_id=? AND name=?",
+        (user_id, name),
+    ).fetchone()
+    if row:
+        return row[0]
+    cur = conn.execute(
+        "INSERT INTO exercises (user_id, name) VALUES (?, ?)",
+        (user_id, name),
+    )
+    return cur.lastrowid
+
+
+def get_exercise_id(user_id: int, name: str) -> int | None:
+    """Return the exercise_id for a given exercise name, or None if not found."""
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT exercise_id FROM exercises WHERE user_id=? AND name=?",
+        (user_id, name),
+    ).fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def get_all_exercises(user_id: int) -> list[str]:
+    """Return all exercise names for this user, sorted alphabetically."""
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT name FROM exercises WHERE user_id=? ORDER BY name",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Weekly plan
+# ---------------------------------------------------------------------------
+
+def get_weekly_plan(user_id: int) -> dict:
+    """Return {day_name: workout_name} for every day that has a plan row."""
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT day_of_week, workout_name FROM weekly_plan WHERE user_id=?",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
+
+
+def save_weekly_plan(user_id: int, plan_dict: dict) -> bool:
+    """Replace the user's weekly schedule with plan_dict {day: workout_name}."""
+    try:
+        conn = _get_conn()
+        conn.execute("DELETE FROM weekly_plan WHERE user_id=?", (user_id,))
+        conn.executemany(
+            "INSERT INTO weekly_plan (user_id, day_of_week, workout_name) VALUES (?,?,?)",
+            [(user_id, day, name) for day, name in plan_dict.items()],
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def save_plan_exercise(
+    user_id: int, day: str, exercise_name: str,
+    sets: int, reps: int, weight_kg: float,
+) -> bool:
+    """Add an exercise to a specific day in the user's plan."""
+    try:
+        conn = _get_conn()
+        exercise_id = _get_or_create_exercise(conn, user_id, exercise_name)
+        conn.execute(
+            """INSERT INTO plan_exercises
+               (user_id, day_of_week, exercise_id, sets, reps, weight_kg)
+               VALUES (?,?,?,?,?,?)""",
+            (user_id, day, exercise_id, sets, reps, weight_kg),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.Error:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Today's workout
 # ---------------------------------------------------------------------------
 
 def get_today_workout(user_id: int) -> dict:
     """
-    Return the planned workout for today based on the user's weekly schedule.
-
-    Parameters
-    ----------
-    user_id : int
-        Identifies which user's plan to look up.
-
-    Returns
-    -------
-    dict
-        Keys:
-            "workout_name" (str)  — e.g. "Push"
-            "exercises"   (list)  — list of dicts, each with keys:
-                "name"     (str)
-                "sets"     (int)
-                "reps"     (int)
-                "weight_kg" (float)
-
-    Notes
-    -----
-    Real implementation: join weekly_plan + plan_exercises on today's weekday.
+    Return {"workout_name": str, "exercises": [{"name", "sets", "reps", "weight_kg"}]}
+    for today's day of week. Returns a Rest day dict if no plan is set.
     """
-    # --- STUB: return fake data so the UI renders without a real database ---
+    today = datetime.datetime.today().strftime("%A")
+    conn  = _get_conn()
+
+    plan_row = conn.execute(
+        "SELECT workout_name FROM weekly_plan WHERE user_id=? AND day_of_week=?",
+        (user_id, today),
+    ).fetchone()
+
+    if plan_row is None:
+        conn.close()
+        return {"workout_name": "Rest", "exercises": []}
+
+    workout_name = plan_row[0]
+
+    rows = conn.execute(
+        """SELECT e.name, pe.sets, pe.reps, pe.weight_kg
+           FROM plan_exercises pe
+           JOIN exercises e ON pe.exercise_id = e.exercise_id
+           WHERE pe.user_id=? AND pe.day_of_week=?
+           ORDER BY pe.id""",
+        (user_id, today),
+    ).fetchall()
+    conn.close()
+
     return {
-        "workout_name": "Push",
+        "workout_name": workout_name,
         "exercises": [
-            {"name": "Bench Press",    "sets": 4, "reps": 8,  "weight_kg": 80.0},
-            {"name": "Overhead Press", "sets": 3, "reps": 10, "weight_kg": 50.0},
-            {"name": "Tricep Pushdown","sets": 3, "reps": 12, "weight_kg": 30.0},
+            {"name": r[0], "sets": r[1], "reps": r[2], "weight_kg": r[3]}
+            for r in rows
         ],
     }
 
 
+# ---------------------------------------------------------------------------
+# Session logging
+# ---------------------------------------------------------------------------
+
+def save_session(user_id: int, sets_data: list) -> bool:
+    """
+    Persist a completed session to the database.
+
+    sets_data is a list of dicts (one per set across all exercises):
+        "name"              str   exercise name
+        "planned_weight_kg" float
+        "planned_reps"      int
+        "actual_weight_kg"  float
+        "actual_reps"       int
+        "completed"         bool
+    """
+    today = datetime.datetime.today().strftime("%Y-%m-%d")
+    try:
+        conn = _get_conn()
+
+        cur        = conn.execute(
+            "INSERT INTO sessions (user_id, date) VALUES (?,?)", (user_id, today)
+        )
+        session_id = cur.lastrowid
+
+        # Group sets by exercise name to assign set numbers
+        by_exercise: dict[str, list] = {}
+        for item in sets_data:
+            by_exercise.setdefault(item["name"], []).append(item)
+
+        for ex_name, sets in by_exercise.items():
+            exercise_id = _get_or_create_exercise(conn, user_id, ex_name)
+            for set_num, s in enumerate(sets, start=1):
+                conn.execute(
+                    """INSERT INTO sets_log
+                       (session_id, exercise_id, set_number,
+                        planned_reps, planned_weight_kg,
+                        actual_reps,  actual_weight_kg, completed)
+                       VALUES (?,?,?,?,?,?,?,?)""",
+                    (
+                        session_id, exercise_id, set_num,
+                        s["planned_reps"],      s["planned_weight_kg"],
+                        s["actual_reps"],       s["actual_weight_kg"],
+                        1 if s["completed"] else 0,
+                    ),
+                )
+
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.Error:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Exercise history
+# ---------------------------------------------------------------------------
+
 def get_exercise_history(user_id: int, exercise_id: int) -> pd.DataFrame:
     """
-    Return the full log of completed sets for a given exercise.
+    Return per-session aggregated history for one exercise.
 
-    Parameters
-    ----------
-    user_id : int
-        The user whose history to retrieve.
-    exercise_id : int
-        Which exercise to filter by.
-
-    Returns
-    -------
-    pd.DataFrame
-        Columns: date (str), planned_weight_kg (float), actual_weight_kg (float),
-                 planned_reps (int), actual_reps (int), sets_completed (int).
-
-    Notes
-    -----
-    Real implementation: SELECT from sets_log JOIN sessions WHERE user_id and
-    exercise_id, ordered by date ASC.
+    Columns: date, planned_weight_kg, actual_weight_kg,
+             planned_reps, actual_reps, sets_completed.
     """
-    # --- STUB: six fake historical sessions ---
+    conn = _get_conn()
+    rows = conn.execute(
+        """SELECT
+               s.date,
+               AVG(sl.planned_weight_kg)   AS planned_weight_kg,
+               AVG(sl.actual_weight_kg)    AS actual_weight_kg,
+               ROUND(AVG(sl.planned_reps)) AS planned_reps,
+               ROUND(AVG(sl.actual_reps))  AS actual_reps,
+               SUM(sl.completed)           AS sets_completed
+           FROM sets_log sl
+           JOIN sessions s ON sl.session_id = s.session_id
+           WHERE s.user_id=? AND sl.exercise_id=?
+           GROUP BY s.session_id, s.date
+           ORDER BY s.date ASC""",
+        (user_id, exercise_id),
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        return pd.DataFrame(
+            columns=["date", "planned_weight_kg", "actual_weight_kg",
+                     "planned_reps", "actual_reps", "sets_completed"]
+        )
+
     return pd.DataFrame(
-        {
-            "date":               ["2025-03-01", "2025-03-08", "2025-03-15",
-                                   "2025-03-22", "2025-03-29", "2025-04-05"],
-            "planned_weight_kg":  [75.0, 75.0, 77.5, 77.5, 80.0, 80.0],
-            "actual_weight_kg":   [75.0, 75.0, 77.5, 80.0, 80.0, 82.5],
-            "planned_reps":       [8,    8,    8,    8,    8,    8   ],
-            "actual_reps":        [8,    7,    8,    8,    8,    8   ],
-            "sets_completed":     [4,    3,    4,    4,    4,    4   ],
-        }
+        rows,
+        columns=["date", "planned_weight_kg", "actual_weight_kg",
+                 "planned_reps", "actual_reps", "sets_completed"],
     )
-
-
-def get_weekly_plan(user_id: int) -> dict:
-    """
-    Return the user's weekly training schedule (day → workout name mapping).
-
-    Parameters
-    ----------
-    user_id : int
-        The user whose plan to retrieve.
-
-    Returns
-    -------
-    dict
-        Keys are full day names ("Monday" … "Sunday"), values are workout
-        names or "Rest".
-
-    Notes
-    -----
-    Real implementation: SELECT day_of_week, workout_name FROM weekly_plan
-    WHERE user_id = ?.
-    """
-    # --- STUB: a classic Push / Pull / Legs split ---
-    return {
-        "Monday":    "Push",
-        "Tuesday":   "Pull",
-        "Wednesday": "Legs",
-        "Thursday":  "Rest",
-        "Friday":    "Push",
-        "Saturday":  "Pull",
-        "Sunday":    "Rest",
-    }
-
-
-def get_all_exercises(user_id: int) -> list:
-    """
-    Return the names of all exercises in the user's exercise library.
-
-    Parameters
-    ----------
-    user_id : int
-        The user whose library to retrieve.
-
-    Returns
-    -------
-    list[str]
-        Exercise names, sorted alphabetically.
-
-    Notes
-    -----
-    Real implementation: SELECT DISTINCT name FROM exercises WHERE user_id = ?
-    ORDER BY name.
-    """
-    # --- STUB: a small default exercise list ---
-    return [
-        "Bench Press",
-        "Deadlift",
-        "Overhead Press",
-        "Romanian Deadlift",
-        "Squat",
-        "Tricep Pushdown",
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Write helpers
-# ---------------------------------------------------------------------------
-
-def save_session(user_id: int, exercise_id: int, sets_data: list) -> bool:
-    """
-    Persist one completed session to the database.
-
-    Parameters
-    ----------
-    user_id : int
-        The user who completed the session.
-    exercise_id : int
-        Which exercise this data belongs to.
-    sets_data : list[dict]
-        One dict per set, each containing:
-            "set_number"  (int)
-            "reps"        (int)
-            "weight_kg"   (float)
-            "completed"   (bool)
-
-    Returns
-    -------
-    bool
-        True if the write succeeded, False on error.
-
-    Notes
-    -----
-    Real implementation: INSERT INTO sessions and then INSERT INTO sets_log
-    inside a transaction so both succeed or both roll back together.
-    """
-    # --- STUB: pretend the write succeeded ---
-    # TODO: open milo.db, INSERT session row, then INSERT one sets_log row per
-    #       set in sets_data, wrapped in a try/except that returns False on
-    #       any sqlite3.Error.
-    return True
-
-
-def save_weekly_plan(user_id: int, plan_dict: dict) -> bool:
-    """
-    Persist the user's weekly schedule to the database.
-
-    Parameters
-    ----------
-    user_id : int
-        The user whose plan to update.
-    plan_dict : dict
-        Same format as returned by get_weekly_plan() — day name → workout name.
-
-    Returns
-    -------
-    bool
-        True if the write succeeded, False on error.
-
-    Notes
-    -----
-    Real implementation: DELETE existing rows for this user, then INSERT fresh
-    rows from plan_dict (upsert-style to avoid duplicates).
-    """
-    # --- STUB: pretend the write succeeded ---
-    return True

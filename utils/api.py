@@ -31,38 +31,32 @@ def search_exercises(query: str) -> list:
     """
     Search the wger exercise database for exercises matching a keyword.
 
-    Parameters
-    ----------
-    query : str
-        Free-text search term entered by the user (e.g. "bench press").
-
-    Returns
-    -------
-    list[dict]
-        Each dict represents one exercise result with keys:
-            "id"           (int)   — wger internal exercise ID
-            "name"         (str)   — display name of the exercise
-            "muscle_group" (str)   — primary muscle targeted
-            "category"     (str)   — equipment category (e.g. "Barbell")
-
-    Notes
-    -----
-    Real implementation: GET https://wger.de/api/v2/exercise/search/
-        params={"term": query, "language": "english", "format": "json"}
-    Parse response["suggestions"] list.
-
-    wger API docs: https://wger.de/api/v2/
+    Returns list of dicts with keys: id, name, muscle_group, category.
+    Falls back to an empty list on any network or parse error.
     """
-    # --- STUB: return a small fixed list regardless of the query ---
-    # When real: filter by query string against wger's search endpoint.
-    return [
-        {"id": 192, "name": "Bench Press",         "muscle_group": "Chest",    "category": "Barbell"},
-        {"id": 79,  "name": "Overhead Press",       "muscle_group": "Shoulders","category": "Barbell"},
-        {"id": 29,  "name": "Deadlift",             "muscle_group": "Back",     "category": "Barbell"},
-        {"id": 47,  "name": "Squat",                "muscle_group": "Legs",     "category": "Barbell"},
-        {"id": 114, "name": "Romanian Deadlift",    "muscle_group": "Hamstrings","category": "Barbell"},
-        {"id": 63,  "name": "Tricep Pushdown",      "muscle_group": "Triceps",  "category": "Cable"},
-    ]
+    import requests
+
+    try:
+        resp = requests.get(
+            "https://wger.de/api/v2/exercise/search/",
+            params={"term": query, "language": "english", "format": "json"},
+            timeout=6,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return []
+
+    results = []
+    for suggestion in data.get("suggestions", []):
+        ex = suggestion.get("data", {})
+        results.append({
+            "id":           ex.get("id", 0),
+            "name":         suggestion.get("value", ""),
+            "muscle_group": ex.get("muscle_list", ""),
+            "category":     ex.get("category_list", ""),
+        })
+    return results
 
 
 # ---------------------------------------------------------------------------
