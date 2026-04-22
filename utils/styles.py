@@ -30,7 +30,22 @@ Helper functions
     recommendation_card()  — renders the ML recommendation banner
 """
 
+import base64
+import os
+
 import streamlit as st
+
+_MODULE_DIR   = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_MODULE_DIR)
+
+
+def _logo_b64() -> str:
+    logo_path = os.path.join(_PROJECT_ROOT, "logo.png")
+    try:
+        with open(logo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except FileNotFoundError:
+        return ""
 
 # ---------------------------------------------------------------------------
 # CSS blob
@@ -446,28 +461,29 @@ def inject_styles() -> None:
 
 
 def sidebar_brand() -> None:
-    """
-    Render the Milo logo and tagline at the top of the sidebar.
-
-    Call this at the start of each page alongside ``inject_styles()`` so
-    that the brand strip appears consistently on every page regardless of
-    which page the user navigated to.
-    """
+    """Render the Milo logo and tagline at the top of the sidebar."""
+    logo_b64 = _logo_b64()
+    logo_html = (
+        f'<img src="data:image/png;base64,{logo_b64}" '
+        f'style="width:56px; height:56px; object-fit:contain; margin-bottom:0.4rem;">'
+        if logo_b64 else ""
+    )
     st.sidebar.markdown(
-        """
+        f"""
         <div style="
             padding: 1rem 0.5rem 1.5rem;
             text-align: center;
             border-bottom: 1px solid rgba(139, 79, 204, 0.30);
             margin-bottom: 0.75rem;
         ">
-            <span style="
+            {logo_html}
+            <div style="
                 font-family: 'Syne', sans-serif;
                 font-size: 1.9rem;
                 font-weight: 800;
                 color: #F2EBFF;
                 letter-spacing: -0.03em;
-            ">🏋️ Milo</span>
+            ">Milo</div>
             <p style="
                 font-family: 'IBM Plex Sans', sans-serif;
                 font-size: 0.68rem;
@@ -583,9 +599,10 @@ def recommendation_card(result: dict) -> None:
     kg         = result["suggested_kg"]
 
     if rec == "increase":
-        # Positive recommendation — encourage the user
-        variant = "success"
-        icon    = "✅"
+        variant  = "success"
+        badge_bg = "rgba(72,199,142,0.20)"
+        badge_fg = "#48C78E"
+        badge    = "INCREASE"
         headline = "Ready to Increase"
         detail   = (
             f"Based on your recent sessions and today's recovery score, "
@@ -593,9 +610,10 @@ def recommendation_card(result: dict) -> None:
             f"You've been consistent — make it count."
         )
     else:
-        # Hold recommendation — explain why staying is smart
-        variant = "warning"
-        icon    = "⏸️"
+        variant  = "warning"
+        badge_bg = "rgba(255,189,68,0.20)"
+        badge_fg = "#FFBD44"
+        badge    = "HOLD"
         headline = "Hold This Week"
         detail   = (
             f"Your recovery or recent completion rate suggests staying at "
@@ -605,7 +623,12 @@ def recommendation_card(result: dict) -> None:
 
     body = f"""
     <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
-        <span style="font-size:1.75rem;">{icon}</span>
+        <span style="
+            font-family:'IBM Plex Sans',sans-serif; font-size:0.7rem;
+            font-weight:700; letter-spacing:0.12em; color:{badge_fg};
+            background:{badge_bg}; padding:0.2rem 0.6rem;
+            border-radius:4px; border:1px solid {badge_fg};
+        ">{badge}</span>
         <span style="font-family:'Syne',sans-serif; font-size:1.3rem;
                      font-weight:700; color:#F2EBFF;">{headline}</span>
         <span style="

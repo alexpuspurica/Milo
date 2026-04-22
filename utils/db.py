@@ -70,13 +70,15 @@ def init_db() -> None:
         );
 
         CREATE TABLE IF NOT EXISTS plan_exercises (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id     INTEGER NOT NULL,
-            day_of_week TEXT NOT NULL,
-            exercise_id INTEGER NOT NULL,
-            sets        INTEGER NOT NULL,
-            reps        INTEGER NOT NULL,
-            weight_kg   REAL NOT NULL
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            day_of_week         TEXT NOT NULL,
+            exercise_id         INTEGER NOT NULL,
+            sets                INTEGER NOT NULL,
+            reps                INTEGER NOT NULL,
+            weight_kg           REAL NOT NULL,
+            progression_every_n INTEGER DEFAULT 0,
+            progression_kg      REAL DEFAULT 0.0
         );
 
         CREATE TABLE IF NOT EXISTS sessions (
@@ -99,6 +101,15 @@ def init_db() -> None:
         );
     """)
     conn.commit()
+
+    # Migration: add progression columns to existing DBs that predate them
+    for col, defval in [("progression_every_n", "0"), ("progression_kg", "0.0")]:
+        try:
+            conn.execute(f"ALTER TABLE plan_exercises ADD COLUMN {col} INTEGER DEFAULT {defval}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
     conn.close()
 
 
@@ -224,6 +235,7 @@ def save_weekly_plan(user_id: int, plan_dict: dict) -> bool:
 def save_plan_exercise(
     user_id: int, day: str, exercise_name: str,
     sets: int, reps: int, weight_kg: float,
+    progression_every_n: int = 0, progression_kg: float = 0.0,
 ) -> bool:
     """Add an exercise to a specific day in the user's plan."""
     try:
@@ -231,15 +243,39 @@ def save_plan_exercise(
         exercise_id = _get_or_create_exercise(conn, user_id, exercise_name)
         conn.execute(
             """INSERT INTO plan_exercises
-               (user_id, day_of_week, exercise_id, sets, reps, weight_kg)
-               VALUES (?,?,?,?,?,?)""",
-            (user_id, day, exercise_id, sets, reps, weight_kg),
+               (user_id, day_of_week, exercise_id, sets, reps, weight_kg,
+                progression_every_n, progression_kg)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (user_id, day, exercise_id, sets, reps, weight_kg,
+             progression_every_n, progression_kg),
         )
         conn.commit()
         conn.close()
         return True
     except sqlite3.Error:
         return False
+
+
+def get_all_plan_exercises(user_id: int) -> list[dict]:
+    """Return all plan exercises grouped by day for the live preview."""
+    conn = _get_conn()
+    rows = conn.execute(
+        """SELECT pe.day_of_week, e.name, pe.sets, pe.reps, pe.weight_kg,
+                  pe.progression_every_n, pe.progression_kg
+           FROM plan_exercises pe
+           JOIN exercises e ON pe.exercise_id = e.exercise_id
+           WHERE pe.user_id=?
+           ORDER BY pe.day_of_week, pe.id""",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "day": r[0], "name": r[1], "sets": r[2], "reps": r[3],
+            "weight_kg": r[4], "progression_every_n": r[5], "progression_kg": r[6],
+        }
+        for r in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -292,7 +328,7 @@ def save_session(user_id: int, sets_data: list) -> bool:
     """
     Persist a completed session to the database.
 
-    sets_data is a list of dicts (one per set across all exercises):
+    sets_data is a list of dicts, one per exercise (or per set):
         "name"              str   exercise name
         "planned_weight_kg" float
         "planned_reps"      int
@@ -341,6 +377,34 @@ def save_session(user_id: int, sets_data: list) -> bool:
 # ---------------------------------------------------------------------------
 # Exercise history
 # ---------------------------------------------------------------------------
+
+def get_exercise_history_by_name(user_id: int, exercise_name: str) -> pd.DataFrame:
+    """
+    Return every set logged for exercises whose name matches the search term.
+
+    Columns: date, set_number, planned_weight_kg, actual_weight_kg,
+             planned_reps, actual_reps, completed, exercise_name.
+    """
+    conn = _get_conn()
+    rows = conn.execute(
+        """SELECT s.date, sl.set_number,
+                  sl.planned_weight_kg, sl.actual_weight_kg,
+                  sl.planned_reps,     sl.actual_reps,
+                  sl.completed,        e.name
+           FROM sets_log sl
+           JOIN sessions  s ON sl.session_id  = s.session_id
+           JOIN exercises e ON sl.exercise_id = e.exercise_id
+           WHERE s.user_id=? AND LOWER(e.name) LIKE LOWER(?)
+           ORDER BY s.date ASC, e.name, sl.set_number ASC""",
+        (user_id, f"%{exercise_name}%"),
+    ).fetchall()
+    conn.close()
+    cols = ["date", "set", "planned_kg", "actual_kg",
+            "planned_reps", "actual_reps", "completed", "exercise"]
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    return pd.DataFrame(rows, columns=cols)
+
 
 def get_exercise_history(user_id: int, exercise_id: int) -> pd.DataFrame:
     """

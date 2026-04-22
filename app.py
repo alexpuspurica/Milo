@@ -47,10 +47,10 @@ init_db()
 logged_in = st.session_state.get("logged_in", False)
 
 st.set_page_config(
-    page_title="Milo",                    # browser tab
-    page_icon="🏋️",                       # emoji favicon
-    layout="wide",                        # full-width canvas
-    initial_sidebar_state="expanded",     # sidebar open by default
+    page_title="Milo",
+    page_icon="💪",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 # ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ sidebar_brand()
 # Each page in pages/ renders its own content when navigated to.
 # ---------------------------------------------------------------------------
 if not logged_in:
-    st.title("🏋️ Milo")
+    st.title("Milo")
     st.write("")
 
     tab_login, tab_signup = st.tabs(["Sign In", "Create Account"])
@@ -119,7 +119,7 @@ if not logged_in:
 # ---------------------------------------------------------------------------
 render_sidebar_user()
 
-st.title("🏋️ Welcome to Milo")
+st.title("Welcome to Milo")
 
 st.markdown(
     "<p style='color:#C4B5DC; font-family:IBM Plex Sans; "
@@ -154,12 +154,12 @@ with col_start:
     st.subheader("Getting started")
     st.markdown(
         """
-        1. Go to **⚙️ Settings** — build your weekly training schedule and
+        1. Go to **Settings** — build your weekly training schedule and
            add exercises to your library.
-        2. Open **📋 Log** after each session to record your actual
+        2. Open **Log** after each session to record your actual
            sets, reps, and weights.
-        3. Check **📊 Progress** to see your strength trajectory over time.
-        4. Each day, visit **🏠 Overview** to see today's plan and your
+        3. Check **Progress** to see your strength trajectory over time.
+        4. Each day, visit **Overview** to see today's plan and your
            personalised Milo recommendation.
         """
     )
@@ -182,6 +182,6 @@ with f3:
 
 # Friendly onboarding nudge at the bottom
 st.info(
-    "💡 **First time here?** Head to **Settings** to set up your weekly plan, "
+    "**First time here?** Head to **Settings** to set up your weekly plan, "
     "then return to **Log** after your first session."
 )
