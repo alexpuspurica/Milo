@@ -1,0 +1,24 @@
+# .streamlit/config.toml
+# ----------------------
+# Streamlit theme configuration for Milo.
+#
+# These values map directly to the brand token set defined in the Milo design:
+#
+#   Iris   (#8B4FCC) — primary action colour (buttons, links, active states)
+#   Abyss  (#1C0435) — deepest background; fills the app canvas
+#   Violet (#3D0A6B) — elevated surface colour (sidebar, cards)
+#   Frost  (#F2EBFF) — primary text on dark backgrounds
+#
+# font = "sans serif" lets utils/styles.py take over with Google Fonts
+# (Syne for headings, IBM Plex Sans for body) once the page loads.
+
+[theme]
+primaryColor           = "#8B4FCC"   # Iris  — buttons, sliders, active nav
+backgroundColor        = "#1C0435"   # Abyss — main canvas background
+secondaryBackgroundColor = "#3D0A6B" # Violet — sidebar + widget backgrounds
+textColor              = "#F2EBFF"   # Frost — all body text
+font                   = "sans serif"
+
+[server]
+# Suppress the "Running on local URL" banner in the terminal
+headless = false

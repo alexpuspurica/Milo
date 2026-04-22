@@ -1,66 +1,124 @@
 """
 app.py — Milo Streamlit entry point
 ====================================
-This is the root file Streamlit runs (`streamlit run app.py`).  It configures
-the global page settings (title, icon, layout) and renders the home / welcome
-screen.
+This is the root file Streamlit runs (``streamlit run app.py``).
 
-Navigation is handled automatically by Streamlit's native multi-page feature:
-any Python file placed in the `pages/` directory is discovered and added to the
-sidebar in alphabetical order.  Files are prefixed with a number (e.g.
-`1_Overview.py`) so they appear in the intended order.
+Responsibilities
+----------------
+1. ``st.set_page_config`` — must be the very first Streamlit call; sets the
+   browser tab title, emoji favicon, layout, and sidebar default state.
+2. ``inject_styles()`` — injects the Milo CSS design system (Google Fonts,
+   colour overrides, card / button styles) into the home page.
+3. ``sidebar_brand()`` — renders the Milo logo strip in the sidebar.
+4. Home page content — a brief welcome screen and navigation guide shown when
+   the user first opens the app.
+
+Multi-page navigation
+---------------------
+Streamlit's native multi-page feature auto-discovers every ``*.py`` file in
+the ``pages/`` directory and adds it to the sidebar.  Files are named with a
+numeric prefix (e.g. ``1_Overview.py``) to control the display order.  No
+manual routing code is required.
 
 Pages
 -----
-1_Overview.py  — today's workout snapshot + ML recommendation
-2_Log.py       — log actual sets/reps vs planned
-3_Progress.py  — charts showing strength progression over time
-4_Settings.py  — configure the weekly training plan and exercises
+    1_Overview.py — today's workout at a glance + ML recommendation
+    2_Log.py      — log actual sets/reps vs planned
+    3_Progress.py — charts showing strength progression over time
+    4_Settings.py — configure the weekly training plan and exercises
 """
 
 import streamlit as st
+from utils.styles import inject_styles, sidebar_brand
 
 # ---------------------------------------------------------------------------
-# Global page configuration
-# Must be the first Streamlit call in the script.
+# Page configuration
+# Must be the FIRST Streamlit call in the entire app.
+# layout="wide" gives the Log and Progress pages room for tables and charts.
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Milo",          # browser tab title
-    page_icon="🏋️",             # dumbbell emoji as favicon
-    layout="centered",          # keep content readable on wide screens
-    initial_sidebar_state="expanded",
+    page_title="Milo",                    # browser tab
+    page_icon="🏋️",                       # emoji favicon
+    layout="wide",                        # full-width canvas
+    initial_sidebar_state="expanded",     # sidebar open by default
 )
 
 # ---------------------------------------------------------------------------
-# Home / welcome content
+# Apply the Milo design system
+# inject_styles() inserts a <style> block (Google Fonts + CSS tokens).
+# sidebar_brand() renders the Milo logo/tagline strip at the top of the nav.
+# ---------------------------------------------------------------------------
+inject_styles()
+sidebar_brand()
+
+# ---------------------------------------------------------------------------
+# Home page content
+# Shown when the user opens the root URL ("/" or the app entry point).
+# Each page in pages/ renders its own content when navigated to.
 # ---------------------------------------------------------------------------
 st.title("🏋️ Welcome to Milo")
-st.subheader("Your data-driven workout companion")
 
 st.markdown(
-    """
-    **Milo** helps strength athletes train smarter by combining simple workout
-    logging with machine-learning recommendations.  After each session, Milo
-    looks at your recent performance and your recovery score to tell you whether
-    you are ready to increase the weight — or whether you should hold steady for
-    another week.
-
-    ---
-    ### What Milo does
-    - **Overview** — see today's planned workout and your Milo recommendation
-      at a glance
-    - **Log** — record actual sets, reps, and weights completed each session
-    - **Progress** — visualise your strength gains over time with interactive
-      charts
-    - **Settings** — build your weekly training schedule and exercise library
-
-    ---
-    Use the **sidebar** on the left to navigate between pages.
-    """
+    "<p style='color:#C4B5DC; font-family:IBM Plex Sans; "
+    "margin-top:-0.4rem; font-size:1.05rem;'>"
+    "Your data-driven workout companion</p>",
+    unsafe_allow_html=True,
 )
 
-# Show a friendly callout if the user lands here with no data yet
+st.markdown("---")
+
+# Two-column intro layout: description left, quick-start guide right
+col_about, col_start = st.columns([3, 2], gap="large")
+
+with col_about:
+    st.subheader("What is Milo?")
+    st.markdown(
+        """
+        **Milo** helps strength athletes train smarter by combining session
+        logging with machine-learning recommendations.
+
+        After each workout, Milo inspects your recent performance and today's
+        recovery score, then tells you whether you're ready to add weight
+        — or whether another week at the same load will serve you better.
+
+        The ML model is trained on the
+        [OpenPowerlifting](https://openpowerlifting.org) dataset: over 700 000
+        real competition results from Raw SBD meets from 2015 onwards.
+        """
+    )
+
+with col_start:
+    st.subheader("Getting started")
+    st.markdown(
+        """
+        1. Go to **⚙️ Settings** — build your weekly training schedule and
+           add exercises to your library.
+        2. Open **📋 Log** after each session to record your actual
+           sets, reps, and weights.
+        3. Check **📊 Progress** to see your strength trajectory over time.
+        4. Each day, visit **🏠 Overview** to see today's plan and your
+           personalised Milo recommendation.
+        """
+    )
+
+st.markdown("---")
+
+# Feature highlight row — three metrics-style tiles
+st.subheader("Key features")
+f1, f2, f3 = st.columns(3)
+
+with f1:
+    st.metric(label="ML Model", value="Random Forest",
+              delta="trained on 714 k lifts")
+with f2:
+    st.metric(label="Exercise API", value="wger REST",
+              delta="searchable database")
+with f3:
+    st.metric(label="Recovery", value="WHOOP + Manual",
+              delta="1–10 or 0–100 scale")
+
+# Friendly onboarding nudge at the bottom
 st.info(
-    "Getting started: go to **Settings** to set up your weekly plan, "
-    "then head to **Log** after your first session."
+    "💡 **First time here?** Head to **Settings** to set up your weekly plan, "
+    "then return to **Log** after your first session."
 )
