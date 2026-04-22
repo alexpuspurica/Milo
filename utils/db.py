@@ -105,6 +105,12 @@ def init_db() -> None:
             user_id    INTEGER NOT NULL,
             expires_at DATETIME NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS whoop_credentials (
+            user_id  INTEGER PRIMARY KEY,
+            username TEXT NOT NULL,
+            password TEXT NOT NULL
+        );
     """)
     conn.commit()
 
@@ -489,5 +495,40 @@ def delete_session_token(token: str) -> None:
     """Invalidate a specific token (logout)."""
     conn = _get_conn()
     conn.execute("DELETE FROM session_tokens WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# WHOOP credentials (per-user)
+# ---------------------------------------------------------------------------
+
+def save_whoop_credentials(user_id: int, username: str, password: str) -> None:
+    conn = _get_conn()
+    conn.execute(
+        """INSERT INTO whoop_credentials (user_id, username, password)
+           VALUES (?,?,?)
+           ON CONFLICT(user_id) DO UPDATE SET username=excluded.username,
+                                              password=excluded.password""",
+        (user_id, username, password),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_whoop_credentials(user_id: int) -> Optional[dict]:
+    """Return {"username", "password"} or None if not set."""
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT username, password FROM whoop_credentials WHERE user_id=?",
+        (user_id,),
+    ).fetchone()
+    conn.close()
+    return {"username": row[0], "password": row[1]} if row else None
+
+
+def delete_whoop_credentials(user_id: int) -> None:
+    conn = _get_conn()
+    conn.execute("DELETE FROM whoop_credentials WHERE user_id=?", (user_id,))
     conn.commit()
     conn.close()

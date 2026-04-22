@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import os
+from pathlib import Path
 
 from utils.styles import inject_styles, sidebar_brand
 from utils.auth   import require_login, render_sidebar_user
@@ -7,6 +9,7 @@ from utils.db     import (
     get_weekly_plan, save_weekly_plan,
     get_all_exercises, save_plan_exercise,
     get_all_plan_exercises,
+    get_whoop_credentials, save_whoop_credentials, delete_whoop_credentials,
 )
 from utils.api    import search_exercises
 
@@ -345,22 +348,6 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # SECTION E: WHOOP Connection
 # ---------------------------------------------------------------------------
-import os
-from pathlib import Path
-
-_ENV_PATH = Path(__file__).parent.parent / ".env"
-
-def _read_whoop_env() -> dict:
-    """Return stored WHOOP credentials from .env, or empty strings if not set."""
-    creds = {"username": "", "password": ""}
-    if _ENV_PATH.exists():
-        for line in _ENV_PATH.read_text().splitlines():
-            if line.startswith("USERNAMEinENV="):
-                creds["username"] = line.split("=", 1)[1].strip()
-            elif line.startswith("PASSWORDinENV="):
-                creds["password"] = line.split("=", 1)[1].strip()
-    return creds
-
 st.markdown("---")
 st.subheader("WHOOP Connection")
 st.markdown(
@@ -369,8 +356,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-_stored = _read_whoop_env()
-_connected = bool(_stored["username"] and _stored["password"])
+_stored = get_whoop_credentials(USER_ID) or {"username": "", "password": ""}
+_connected = bool(_stored["username"])
 
 if _connected:
     st.success(f"Connected as **{_stored['username']}**")
@@ -386,7 +373,7 @@ with st.form("whoop_form"):
     whoop_password = st.text_input(
         "WHOOP Password",
         type="password",
-        placeholder="Enter your WHOOP password",
+        placeholder="Leave blank to keep existing password" if _connected else "Enter your WHOOP password",
     )
     col_save, col_clear = st.columns([3, 1])
     with col_save:
@@ -395,18 +382,18 @@ with st.form("whoop_form"):
         clear_whoop = st.form_submit_button("Disconnect", use_container_width=True)
 
 if save_whoop:
-    if not whoop_email or not whoop_password:
-        st.error("Please enter both email and password.")
+    if not whoop_email:
+        st.error("Please enter your WHOOP email.")
     else:
-        _ENV_PATH.write_text(
-            f"USERNAMEinENV={whoop_email.strip()}\n"
-            f"PASSWORDinENV={whoop_password}\n"
-        )
-        st.success("WHOOP credentials saved. Recovery will sync automatically on the Overview page.")
-        st.rerun()
+        password_to_save = whoop_password if whoop_password else _stored["password"]
+        if not password_to_save:
+            st.error("Please enter your WHOOP password.")
+        else:
+            save_whoop_credentials(USER_ID, whoop_email.strip(), password_to_save)
+            st.success("WHOOP credentials saved. Recovery will sync automatically on the Overview page.")
+            st.rerun()
 
 if clear_whoop:
-    if _ENV_PATH.exists():
-        _ENV_PATH.unlink()
+    delete_whoop_credentials(USER_ID)
     st.success("WHOOP disconnected.")
     st.rerun()
