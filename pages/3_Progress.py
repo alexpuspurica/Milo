@@ -1,38 +1,75 @@
-"""
-pages/3_Progress.py — Strength progression visualisation
-=========================================================
-This page lets the user explore how their performance has changed over time
-for any exercise in their library.
-
-The user selects an exercise from a dropdown and sees three charts:
-
-1. **Weight over time** (line chart) — how the load for that exercise has
-   evolved across sessions, showing both planned and actual weights.
-2. **Planned vs Actual** (grouped bar chart) — per-session comparison of
-   the target prescription against what was actually completed.
-3. **Completion rate** (metric or bar chart) — percentage of planned sets
-   that were fully completed.
-
-All data comes from `utils/db.get_exercise_history()`, which queries the
-SQLite session log.
-
-UI components planned:
-    st.selectbox   — choose the exercise to inspect
-    st.line_chart  — weight-over-time trend
-    st.bar_chart   — planned vs actual per session
-    st.metric      — overall completion rate
-    st.pyplot      — fallback for more complex matplotlib/seaborn charts
-"""
-
 import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+from utils.auth import require_login, render_sidebar_user
+from utils.db import get_all_exercises, get_exercise_history
 
-# ---------------------------------------------------------------------------
-# Page header
-# ---------------------------------------------------------------------------
+require_login()
+render_sidebar_user()
+
 st.title("Progress")
 
-# ---------------------------------------------------------------------------
-# Placeholder content — charts will be rendered here once
-# utils/db.get_exercise_history() is wired up and real session data exists.
-# ---------------------------------------------------------------------------
-st.info("Coming soon — your strength progression charts will appear here.")
+USER_ID = st.session_state["user_id"]
+
+exercises = get_all_exercises(USER_ID)
+
+if not exercises:
+    st.info("No exercises found. Add exercises in Settings first.")
+    st.stop()
+
+selected = st.selectbox("Select exercise", exercises)
+
+# use index 1 as a placeholder exercise_id — real implementation uses the actual ID
+history = get_exercise_history(USER_ID, exercise_id=1)
+
+if history.empty:
+    st.info(f"No session data yet for {selected}. Log some sessions first.")
+    st.stop()
+
+st.divider()
+
+# ---- Weight over time ----
+st.subheader("Weight over time")
+
+fig1, ax1 = plt.subplots(figsize=(8, 3))
+ax1.plot(history["date"], history["planned_weight_kg"], marker="o", label="Planned", linestyle="--", color="steelblue")
+ax1.plot(history["date"], history["actual_weight_kg"],  marker="o", label="Actual",  linestyle="-",  color="darkorange")
+ax1.set_xlabel("Date")
+ax1.set_ylabel("Weight (kg)")
+ax1.set_title(f"{selected} — weight progression")
+ax1.legend()
+plt.xticks(rotation=30)
+plt.tight_layout()
+st.pyplot(fig1)
+
+st.divider()
+
+# ---- Planned vs actual reps ----
+st.subheader("Planned vs actual reps")
+
+x = range(len(history))
+width = 0.35
+
+fig2, ax2 = plt.subplots(figsize=(8, 3))
+ax2.bar([i - width/2 for i in x], history["planned_reps"], width=width, label="Planned", color="steelblue")
+ax2.bar([i + width/2 for i in x], history["actual_reps"],  width=width, label="Actual",  color="darkorange")
+ax2.set_xticks(list(x))
+ax2.set_xticklabels(history["date"], rotation=30)
+ax2.set_ylabel("Reps")
+ax2.set_title(f"{selected} — planned vs actual reps per session")
+ax2.legend()
+plt.tight_layout()
+st.pyplot(fig2)
+
+st.divider()
+
+# ---- Completion rate ----
+st.subheader("Completion rate")
+
+planned_sets_total = len(history) * history["sets_completed"].max()
+completed_sets = history["sets_completed"].sum()
+max_sets = history["sets_completed"].max()
+completion_pct = round((history["sets_completed"] / max_sets).mean() * 100, 1)
+
+st.metric("Average sets completed", f"{completion_pct}%")
+st.bar_chart(history.set_index("date")["sets_completed"])

@@ -15,7 +15,7 @@ statements with real SQL when the database schema is finalised.
 
 Database schema (planned)
 --------------------------
-    users(user_id, name, created_at)
+    users(user_id, username, password_hash, salt, created_at)
     exercises(exercise_id, name, muscle_group, wger_id)
     weekly_plan(user_id, day_of_week, workout_name)
     plan_exercises(user_id, day_of_week, exercise_id, sets, reps, weight_kg)
@@ -23,7 +23,96 @@ Database schema (planned)
     sets_log(log_id, session_id, exercise_id, set_number, reps, weight_kg, completed)
 """
 
+import hashlib
+import os
+import secrets
+import sqlite3
+
 import pandas as pd
+
+# ---------------------------------------------------------------------------
+# Database path — sits at the project root alongside app.py
+# ---------------------------------------------------------------------------
+_MODULE_DIR   = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_MODULE_DIR)
+_DB_PATH      = os.path.join(_PROJECT_ROOT, "milo.db")
+
+
+def _get_conn() -> sqlite3.Connection:
+    return sqlite3.connect(_DB_PATH, check_same_thread=False)
+
+
+# ---------------------------------------------------------------------------
+# Schema initialisation — call once at app startup
+# ---------------------------------------------------------------------------
+
+def init_db() -> None:
+    """Create all tables if they don't exist yet."""
+    conn = _get_conn()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            username      TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            salt          TEXT NOT NULL,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Password helpers (never stored in plain text)
+# ---------------------------------------------------------------------------
+
+def _hash_password(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), salt.encode(), 100_000
+    ).hex()
+
+
+# ---------------------------------------------------------------------------
+# User auth
+# ---------------------------------------------------------------------------
+
+def verify_user(username: str, password: str) -> dict | None:
+    """
+    Check credentials. Returns {"user_id": int, "username": str} on success,
+    None if the username doesn't exist or the password is wrong.
+    """
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT user_id, username, password_hash, salt FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    user_id, uname, stored_hash, salt = row
+    if _hash_password(password, salt) == stored_hash:
+        return {"user_id": user_id, "username": uname}
+    return None
+
+
+def create_user(username: str, password: str) -> bool:
+    """
+    Register a new user. Returns True on success, False if the username is
+    already taken. Called by the sign-up page.
+    """
+    salt          = secrets.token_hex(16)
+    password_hash = _hash_password(password, salt)
+    try:
+        conn = _get_conn()
+        conn.execute(
+            "INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)",
+            (username, password_hash, salt),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        return False  # username already taken
 
 
 # ---------------------------------------------------------------------------
