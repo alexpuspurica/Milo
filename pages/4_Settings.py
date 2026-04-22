@@ -141,46 +141,55 @@ if not day_chosen:
     st.caption("Select a day above to unlock the exercise search and prescription fields.")
     st.stop()
 
-# --- Step 2: Search ---
+# --- Step 2: Exercise name ---
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown(
     "<p style='font-size:0.72rem; color:#C4B5DC; font-weight:600; "
     "text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.3rem;'>"
-    "Step 2 — Search for an exercise</p>",
+    "Step 2 — Name the exercise</p>",
     unsafe_allow_html=True,
 )
 
-search_col, btn_col = st.columns([4, 1], gap="small")
+name_col, search_col, search_btn_col = st.columns([3, 3, 1], gap="small")
+
+with name_col:
+    custom_name = st.text_input(
+        label       = "Exercise name",
+        placeholder = "e.g. Bench Press, RDL ...",
+        help        = "Type directly — new names are added to your library automatically.",
+        key         = "custom_exercise_name",
+    )
 
 with search_col:
     search_query = st.text_input(
-        label       = "Search exercises",
-        placeholder = "e.g. bench press, squat, row ...",
+        label       = "Or search exercise database",
+        placeholder = "Search wger API ...",
         key         = "exercise_search",
     )
 
-with btn_col:
+with search_btn_col:
     st.markdown("<div style='height:1.8rem;'></div>", unsafe_allow_html=True)
     search_clicked = st.button("Search", key="search_btn")
 
-chosen_name = None
-
 if search_query or search_clicked:
     results = search_exercises(search_query)
-
     if results:
         results_df = pd.DataFrame(results)[["name", "muscle_group", "category"]]
         results_df.columns = ["Exercise", "Muscle Group", "Equipment"]
         st.dataframe(results_df, use_container_width=True, hide_index=True)
-
         result_names = [r["name"] for r in results]
-        chosen_name  = st.selectbox(
-            "Select from results",
-            options = result_names,
+        api_chosen   = st.selectbox(
+            "Select to use as exercise name",
+            options = ["— pick one —"] + result_names,
             key     = "chosen_exercise",
         )
+        if api_chosen and api_chosen != "— pick one —":
+            st.session_state["custom_exercise_name"] = api_chosen
+            st.rerun()
     else:
-        st.info("No exercises found. Try a different keyword.")
+        st.info("No results — type a custom name in the Exercise name field.")
+
+chosen_name = custom_name.strip() if custom_name and custom_name.strip() else None
 
 # --- Step 3: Prescription + Progression ---
 st.markdown("<br>", unsafe_allow_html=True)
@@ -248,7 +257,7 @@ if st.button("Add to Plan", key="add_exercise_btn"):
         else:
             st.error("Failed to save exercise. Please try again.")
     else:
-        st.warning("Search for and select an exercise first.")
+        st.warning("Enter an exercise name in the field above before adding.")
 
 # ---------------------------------------------------------------------------
 # SECTION C: Live Plan Preview

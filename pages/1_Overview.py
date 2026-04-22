@@ -36,51 +36,51 @@ DAYS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 DAYS_FULL  = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 weekly_plan = get_weekly_plan(USER_ID)
+today_full  = today.strftime("%A")
 
-today_full = today.strftime("%A")
+day_cols = st.columns(7, gap="small")
 
-day_cells = []
-for short, full in zip(DAYS_SHORT, DAYS_FULL):
-    workout = weekly_plan.get(full, "Rest")
+for col, short, full in zip(day_cols, DAYS_SHORT, DAYS_FULL):
+    workout     = weekly_plan.get(full, "Rest")
     is_today    = (full == today_full)
     is_training = (workout != "Rest")
 
     if is_today:
-        bg     = "rgba(139,79,204,0.55)"
-        border = "2px solid #8B4FCC"
-        label_color = "#F2EBFF"
+        bg          = "rgba(139,79,204,0.60)"
+        border      = "2px solid #8B4FCC"
         day_color   = "#F2EBFF"
-    elif is_training:
-        bg     = "rgba(139,79,204,0.18)"
-        border = "1px solid rgba(139,79,204,0.45)"
         label_color = "#F2EBFF"
+    elif is_training:
+        bg          = "rgba(139,79,204,0.20)"
+        border      = "1px solid rgba(139,79,204,0.50)"
         day_color   = "#C4B5DC"
+        label_color = "#F2EBFF"
     else:
-        bg     = "rgba(28,4,53,0.5)"
-        border = "1px solid rgba(139,79,204,0.15)"
-        label_color = "#C4B5DC"
+        bg          = "rgba(28,4,53,0.50)"
+        border      = "1px solid rgba(139,79,204,0.15)"
         day_color   = "#6B2FA8"
+        label_color = "#C4B5DC"
 
-    day_cells.append(f"""
-        <div style="
-            flex:1; text-align:center; padding:0.55rem 0.25rem;
-            border-radius:8px; background:{bg}; border:{border};
-        ">
-            <div style="font-family:'IBM Plex Sans',sans-serif; font-size:0.65rem;
-                        font-weight:600; text-transform:uppercase;
-                        letter-spacing:0.1em; color:{day_color};">{short}</div>
-            <div style="font-family:'IBM Plex Sans',sans-serif; font-size:0.72rem;
-                        font-weight:500; color:{label_color}; margin-top:0.2rem;
-                        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                {workout}
+    with col:
+        st.markdown(
+            f"""
+            <div style="text-align:center; padding:0.55rem 0.2rem;
+                        border-radius:8px; background:{bg}; border:{border};">
+                <div style="font-family:'IBM Plex Sans',sans-serif;
+                            font-size:0.62rem; font-weight:700;
+                            text-transform:uppercase; letter-spacing:0.1em;
+                            color:{day_color};">{short}</div>
+                <div style="font-family:'IBM Plex Sans',sans-serif;
+                            font-size:0.68rem; font-weight:500;
+                            color:{label_color}; margin-top:0.25rem;
+                            overflow:hidden; text-overflow:ellipsis;
+                            white-space:nowrap;">{workout}</div>
             </div>
-        </div>
-    """)
+            """,
+            unsafe_allow_html=True,
+        )
 
-st.markdown(
-    f'<div style="display:flex; gap:0.35rem; margin-bottom:1.5rem;">{"".join(day_cells)}</div>',
-    unsafe_allow_html=True,
-)
+st.markdown("<div style='margin-bottom:1rem;'></div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
