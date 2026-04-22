@@ -188,6 +188,84 @@ Milo/
 
 ---
 
+## How It All Connects
+
+### Training Phase (run once, offline)
+
+The ML model is trained before the app is used. The two notebooks in `ml/` handle this:
+
+```
+openpowerlifting_filtered.csv
+        │
+        ▼
+data_cleaning.ipynb
+(cleans data, engineers features, bins numbers into bands)
+        │
+        ▼
+milo_clean.csv
+        │
+        ▼
+models.ipynb
+(trains 8 classifiers, picks the best one, saves it)
+        │
+        ▼
+milo_model.pkl        ← the only file the app needs at runtime
+feature_columns.pkl
+```
+
+### App Runtime (what happens when a user opens Milo)
+
+```
+User logs workouts           User sets up profile
+(Log page → SQLite)          (Settings page → SQLite)
+        │                             │
+        └──────────────┬──────────────┘
+                       │
+                       ▼
+              utils/predict.py
+        (reads SQLite, builds feature vector)
+
+        days since last session  →  days_band
+        bodyweight change        →  bodyweight_change_band
+        recent performance       →  prev_total_band
+        age (from profile)       →  age_band
+        sex (from profile)       →  is_female
+                       │
+                       ▼
+             milo_model.pkl
+        (same feature format it was trained on)
+                       │
+                       ▼
+         "Increase / Maintain / Back off"
+                       │
+                       ▼
+            Overview page → shown to user
+```
+
+### The Exercise Problem
+
+The training data uses powerlifting totals (squat + bench + deadlift). Milo users can track hundreds of custom exercises. The model bridges this gap because it predicts **session-level readiness**, not exercise-specific progress.
+
+In the Settings page, users label one exercise as their squat/bench/deadlift equivalent (or a single "main lift"). `predict.py` sums those to compute a pseudo-total, bins it into the same band the model was trained on, and returns a recommendation. Every other exercise in the log uses a simple rule: if you hit all your planned sets last session, suggest increasing weight next time.
+
+The ML sets the overall session tone. Per-exercise progressions follow the app's rule-based logic.
+
+### Where Everything Lives
+
+| File | Role |
+|---|---|
+| `utils/predict.py` | Loads model, builds feature vector from SQLite, returns recommendation |
+| `utils/db.py` | All SQLite reads and writes |
+| `utils/api.py` | wger exercise API + WHOOP API calls |
+| `pages/overview.py` | Calls `predict.py`, shows today's recommendation |
+| `pages/log.py` | Calls `db.py` to save session data |
+| `pages/progress.py` | Calls `db.py` to build charts |
+| `pages/settings.py` | Calls `api.py` and `db.py` for plan setup |
+| `ml/data/milo_model.pkl` | Saved trained model, loaded by `predict.py` |
+| `ml/data/feature_columns.pkl` | Column order the model expects |
+
+---
+
 ## How to Run
 
 ```bash
