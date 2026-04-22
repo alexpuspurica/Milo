@@ -99,6 +99,12 @@ def init_db() -> None:
             actual_weight_kg  REAL,
             completed         INTEGER DEFAULT 1
         );
+
+        CREATE TABLE IF NOT EXISTS session_tokens (
+            token      TEXT PRIMARY KEY,
+            user_id    INTEGER NOT NULL,
+            expires_at DATETIME NOT NULL
+        );
     """)
     conn.commit()
 
@@ -442,3 +448,46 @@ def get_exercise_history(user_id: int, exercise_id: int) -> pd.DataFrame:
         columns=["date", "planned_weight_kg", "actual_weight_kg",
                  "planned_reps", "actual_reps", "sets_completed"],
     )
+
+
+# ---------------------------------------------------------------------------
+# Session token helpers (persistent login)
+# ---------------------------------------------------------------------------
+
+def create_session_token(user_id: int, days: int = 30) -> str:
+    """Create a persistent login token valid for `days` days."""
+    token      = secrets.token_urlsafe(32)
+    expires_at = (datetime.datetime.utcnow() +
+                  datetime.timedelta(days=days)).isoformat()
+    conn = _get_conn()
+    conn.execute(
+        "INSERT INTO session_tokens (token, user_id, expires_at) VALUES (?,?,?)",
+        (token, user_id, expires_at),
+    )
+    conn.commit()
+    conn.close()
+    return token
+
+
+def validate_session_token(token: str) -> dict | None:
+    """Return {user_id, username} if the token is valid and unexpired, else None."""
+    conn = _get_conn()
+    row = conn.execute(
+        """SELECT st.user_id, u.username
+           FROM session_tokens st
+           JOIN users u ON st.user_id = u.user_id
+           WHERE st.token = ? AND st.expires_at > datetime('now')""",
+        (token,),
+    ).fetchone()
+    conn.close()
+    if row:
+        return {"user_id": row[0], "username": row[1]}
+    return None
+
+
+def delete_session_token(token: str) -> None:
+    """Invalidate a specific token (logout)."""
+    conn = _get_conn()
+    conn.execute("DELETE FROM session_tokens WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()

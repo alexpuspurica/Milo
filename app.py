@@ -32,7 +32,8 @@ import streamlit as st
 from utils.styles import inject_styles, sidebar_brand
 
 from utils.auth import render_sidebar_user
-from utils.db import init_db, verify_user, create_user
+from utils.db import (init_db, verify_user, create_user,
+                      create_session_token, validate_session_token)
 
 # ---------------------------------------------------------------------------
 # Bootstrap — create DB tables on first run
@@ -44,6 +45,19 @@ init_db()
 # Must be the FIRST Streamlit call in the entire app.
 # layout="wide" gives the Log and Progress pages room for tables and charts.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Auto-login from persisted token stored in query params
+# ---------------------------------------------------------------------------
+if not st.session_state.get("logged_in"):
+    _token = st.query_params.get("session")
+    if _token:
+        _user = validate_session_token(_token)
+        if _user:
+            st.session_state["logged_in"] = True
+            st.session_state["user_id"]   = _user["user_id"]
+            st.session_state["username"]  = _user["username"]
+            st.session_state["session_token"] = _token
+
 logged_in = st.session_state.get("logged_in", False)
 
 st.set_page_config(
@@ -84,9 +98,12 @@ if not logged_in:
             else:
                 user = verify_user(username.strip(), password)
                 if user:
-                    st.session_state["logged_in"] = True
-                    st.session_state["user_id"]   = user["user_id"]
-                    st.session_state["username"]  = user["username"]
+                    token = create_session_token(user["user_id"])
+                    st.session_state["logged_in"]     = True
+                    st.session_state["user_id"]       = user["user_id"]
+                    st.session_state["username"]      = user["username"]
+                    st.session_state["session_token"] = token
+                    st.query_params["session"] = token
                     st.rerun()
                 else:
                     st.error("Incorrect username or password.")
