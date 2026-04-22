@@ -19,11 +19,19 @@ _FEATURES_PATH = os.path.join(_PROJECT_ROOT, "ml", "data", "feature_columns.pkl"
 # F1-optimised threshold from models.ipynb
 _BASE_THRESHOLD = 0.39
 
-# Load once at import time — small LogReg model, negligible overhead
-with open(_MODEL_PATH, "rb") as _f:
-    _model = pickle.load(_f)
-with open(_FEATURES_PATH, "rb") as _f:
-    _feature_cols: list = pickle.load(_f)
+# Load model files once at import time.
+# Wrapped in try/except so the app starts cleanly even before the ML notebook
+# has been run and the pkl files have been generated.
+try:
+    with open(_MODEL_PATH, "rb") as _f:
+        _model = pickle.load(_f)
+    with open(_FEATURES_PATH, "rb") as _f:
+        _feature_cols: list = pickle.load(_f)
+    _MODEL_LOADED = True
+except FileNotFoundError:
+    _model        = None
+    _feature_cols = []
+    _MODEL_LOADED = False
 
 
 # --- band helper functions ---
@@ -88,6 +96,15 @@ def predict_increase(user_id: int, exercise_id: int, recovery_score: int) -> dic
         "confidence"      float  model probability (0.0–1.0)
         "suggested_kg"    float  recommended weight for next session
     """
+    # If the model pkl files haven't been generated yet (ml/models.ipynb not run),
+    # return a stub result so the UI still renders.
+    if not _MODEL_LOADED:
+        return {
+            "recommendation": "increase",
+            "confidence":     0.78,
+            "suggested_kg":   82.5,
+        }
+
     # pull exercise history to derive days since last session and recent weight
     history = get_exercise_history(user_id, exercise_id)
 

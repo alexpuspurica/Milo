@@ -19,6 +19,7 @@ import hashlib
 import os
 import secrets
 import sqlite3
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -115,7 +116,7 @@ def _hash_password(password: str, salt: str) -> str:
 # User auth
 # ---------------------------------------------------------------------------
 
-def verify_user(username: str, password: str) -> dict | None:
+def verify_user(username: str, password: str) -> Optional[dict]:
     """Returns {"user_id", "username"} on success, None on failure."""
     conn = _get_conn()
     row = conn.execute(
@@ -167,7 +168,7 @@ def _get_or_create_exercise(conn: sqlite3.Connection, user_id: int, name: str) -
     return cur.lastrowid
 
 
-def get_exercise_id(user_id: int, name: str) -> int | None:
+def get_exercise_id(user_id: int, name: str) -> Optional[int]:
     """Return the exercise_id for a given exercise name, or None if not found."""
     conn = _get_conn()
     row = conn.execute(
@@ -178,7 +179,7 @@ def get_exercise_id(user_id: int, name: str) -> int | None:
     return row[0] if row else None
 
 
-def get_all_exercises(user_id: int) -> list[str]:
+def get_all_exercises(user_id: int) -> List[str]:
     """Return all exercise names for this user, sorted alphabetically."""
     conn = _get_conn()
     rows = conn.execute(
@@ -309,7 +310,7 @@ def save_session(user_id: int, sets_data: list) -> bool:
         session_id = cur.lastrowid
 
         # Group sets by exercise name to assign set numbers
-        by_exercise: dict[str, list] = {}
+        by_exercise: Dict[str, list] = {}
         for item in sets_data:
             by_exercise.setdefault(item["name"], []).append(item)
 
