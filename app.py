@@ -31,11 +31,21 @@ Pages
 import streamlit as st
 from utils.styles import inject_styles, sidebar_brand
 
+from utils.auth import render_sidebar_user
+from utils.db import init_db, verify_user, create_user
+
+# ---------------------------------------------------------------------------
+# Bootstrap — create DB tables on first run
+# ---------------------------------------------------------------------------
+init_db()
+
 # ---------------------------------------------------------------------------
 # Page configuration
 # Must be the FIRST Streamlit call in the entire app.
 # layout="wide" gives the Log and Progress pages room for tables and charts.
 # ---------------------------------------------------------------------------
+logged_in = st.session_state.get("logged_in", False)
+
 st.set_page_config(
     page_title="Milo",                    # browser tab
     page_icon="🏋️",                       # emoji favicon
@@ -56,6 +66,59 @@ sidebar_brand()
 # Shown when the user opens the root URL ("/" or the app entry point).
 # Each page in pages/ renders its own content when navigated to.
 # ---------------------------------------------------------------------------
+if not logged_in:
+    st.title("🏋️ Milo")
+    st.write("")
+
+    tab_login, tab_signup = st.tabs(["Sign In", "Create Account"])
+
+    with tab_login:
+        with st.form("login_form"):
+            username  = st.text_input("Username")
+            password  = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Log In", use_container_width=True)
+
+        if submitted:
+            if not username or not password:
+                st.warning("Please enter both a username and password.")
+            else:
+                user = verify_user(username.strip(), password)
+                if user:
+                    st.session_state["logged_in"] = True
+                    st.session_state["user_id"]   = user["user_id"]
+                    st.session_state["username"]  = user["username"]
+                    st.rerun()
+                else:
+                    st.error("Incorrect username or password.")
+
+    with tab_signup:
+        with st.form("signup_form"):
+            new_username = st.text_input("Choose a username")
+            new_password = st.text_input("Choose a password", type="password")
+            confirm      = st.text_input("Confirm password", type="password")
+            signup_btn   = st.form_submit_button("Create Account", use_container_width=True)
+
+        if signup_btn:
+            if not new_username or not new_password:
+                st.warning("Please fill in all fields.")
+            elif len(new_username.strip()) < 3:
+                st.error("Username must be at least 3 characters.")
+            elif new_password != confirm:
+                st.error("Passwords do not match.")
+            else:
+                ok = create_user(new_username.strip(), new_password)
+                if ok:
+                    st.success("Account created! Switch to Sign In to log in.")
+                else:
+                    st.error("That username is already taken.")
+
+    st.stop()  # nothing below renders when not logged in
+
+# ---------------------------------------------------------------------------
+# Home / welcome screen (authenticated users only)
+# ---------------------------------------------------------------------------
+render_sidebar_user()
+
 st.title("🏋️ Welcome to Milo")
 
 st.markdown(
