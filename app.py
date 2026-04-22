@@ -29,8 +29,9 @@ Pages
 """
 
 import streamlit as st
-from utils.styles import inject_styles, sidebar_brand
+from streamlit_cookies_controller import CookieController
 
+from utils.styles import inject_styles, sidebar_brand
 from utils.auth import render_sidebar_user
 from utils.db import (init_db, verify_user, create_user,
                       create_session_token, validate_session_token)
@@ -41,25 +42,8 @@ from utils.db import (init_db, verify_user, create_user,
 init_db()
 
 # ---------------------------------------------------------------------------
-# Page configuration
-# Must be the FIRST Streamlit call in the entire app.
-# layout="wide" gives the Log and Progress pages room for tables and charts.
+# Page configuration — must be the FIRST Streamlit call
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Auto-login from persisted token stored in query params
-# ---------------------------------------------------------------------------
-if not st.session_state.get("logged_in"):
-    _token = st.query_params.get("session")
-    if _token:
-        _user = validate_session_token(_token)
-        if _user:
-            st.session_state["logged_in"] = True
-            st.session_state["user_id"]   = _user["user_id"]
-            st.session_state["username"]  = _user["username"]
-            st.session_state["session_token"] = _token
-
-logged_in = st.session_state.get("logged_in", False)
-
 st.set_page_config(
     page_title="Milo",
     page_icon="💪",
@@ -67,13 +51,24 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ---------------------------------------------------------------------------
-# Apply the Milo design system
-# inject_styles() inserts a <style> block (Google Fonts + CSS tokens).
-# sidebar_brand() renders the Milo logo/tagline strip at the top of the nav.
-# ---------------------------------------------------------------------------
 inject_styles()
 sidebar_brand()
+
+# ---------------------------------------------------------------------------
+# Restore session from cookie on every load
+# ---------------------------------------------------------------------------
+_cookies = CookieController()
+if not st.session_state.get("logged_in"):
+    _token = _cookies.get("milo_session")
+    if _token:
+        _user = validate_session_token(_token)
+        if _user:
+            st.session_state["logged_in"]     = True
+            st.session_state["user_id"]       = _user["user_id"]
+            st.session_state["username"]      = _user["username"]
+            st.session_state["session_token"] = _token
+
+logged_in = st.session_state.get("logged_in", False)
 
 # ---------------------------------------------------------------------------
 # Home page content
@@ -103,7 +98,7 @@ if not logged_in:
                     st.session_state["user_id"]       = user["user_id"]
                     st.session_state["username"]      = user["username"]
                     st.session_state["session_token"] = token
-                    st.query_params["session"] = token
+                    _cookies.set("milo_session", token)
                     st.rerun()
                 else:
                     st.error("Incorrect username or password.")
