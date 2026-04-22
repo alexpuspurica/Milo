@@ -156,24 +156,34 @@ Main area:
 
 ```
 Milo/
-├── app.py                  # Streamlit entry point + sidebar navigation
-├── pages/
+├── app.py                      # Streamlit entry point + sidebar navigation
+├── requirements.txt
+├── privacy_policy.html
+├── README.md
+│
+├── pages/                      # one file per app page
 │   ├── overview.py
 │   ├── log.py
 │   ├── progress.py
 │   └── settings.py
-├── db.py                   # SQLite read/write helpers
-├── api.py                  # wger exercise API + WHOOP API calls
-├── ml.py                   # load model, run prediction
-├── data_cleaning.ipynb     # cleans OpenPowerlifting data
-├── models.ipynb            # trains and compares all ML models
-├── data/
-│   ├── raw/
-│   │   └── openpowerlifting_filtered.csv
-│   ├── milo_model.pkl      # saved best model
-│   └── feature_columns.pkl
-├── privacy_policy.html
-└── requirements.txt
+│
+├── utils/                      # shared helper modules
+│   ├── db.py                   # SQLite read/write helpers
+│   ├── api.py                  # wger exercise API + WHOOP API calls
+│   └── predict.py              # load model, run prediction
+│
+└── ml/                         # all ML work lives here
+    ├── data_cleaning.ipynb     # cleans OpenPowerlifting data → milo_clean.csv
+    ├── models.ipynb            # trains 8 classifiers, compares, saves best model
+    └── data/
+        ├── raw/
+        │   └── openpowerlifting_filtered.csv   # 47MB source data
+        ├── milo_model.pkl      # saved best model (loaded by utils/predict.py)
+        ├── feature_columns.pkl
+        └── charts/
+            ├── accuracy_comparison.png
+            ├── f1_comparison.png
+            └── feature_importance.png
 ```
 
 ---

@@ -1,9 +1,9 @@
 # Raw data files - too large for GitHub
-data/raw/*.zip
-data/raw/openpowerlifting-2026-04-18/
+ml/data/raw/*.zip
+ml/data/raw/openpowerlifting-2026-04-18/
 
-# Generated cleaned CSV - regenerate by running data_cleaning.ipynb
-data/milo_clean.csv
+# Generated cleaned CSV - regenerate by running ml/data_cleaning.ipynb
+ml/data/milo_clean.csv
 
 # Python
 __pycache__/
