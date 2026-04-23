@@ -123,7 +123,7 @@ def _whoop_get(path: str, tokens: dict, params: dict = None):
     import requests
     tokens = _refresh_if_needed(tokens)
     resp = requests.get(
-        "https://api.prod.whoop.com/developer" + path,
+        f"{"https://api.prod.whoop.com/developer"}{path}",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
         params=params,
         timeout=10,
