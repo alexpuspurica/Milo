@@ -20,5 +20,5 @@ textColor              = "#F2EBFF"   # Frost — all body text
 font                   = "sans serif"
 
 [server]
-headless = false
+headless = true
 port = 8501
