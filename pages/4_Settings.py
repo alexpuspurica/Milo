@@ -402,6 +402,7 @@ if _tokens:
     with col_data:
         if st.button("Fetch latest WHOOP data", use_container_width=True):
             try:
+                #We probably can delete profile and body lines (we do not use them)
                 profile,  _tokens = get_whoop_profile(_tokens)
                 body,     _tokens = get_whoop_body_measurement(_tokens)
                 recovery, _tokens = get_whoop_recovery(_tokens, days=2)

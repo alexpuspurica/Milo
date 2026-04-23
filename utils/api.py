@@ -135,6 +135,7 @@ def _whoop_get(path: str, tokens: dict, params: dict = None):
 # WHOOP data endpoints
 # ---------------------------------------------------------------------------
 
+# we can delete profile and body measure here too i think we do not use it
 def get_whoop_profile(tokens: dict) -> tuple[dict, dict]:
     """Returns (profile_dict, updated_tokens)."""
     data, tokens = _whoop_get("/v2/user/profile/basic", tokens)
@@ -146,10 +147,11 @@ def get_whoop_body_measurement(tokens: dict) -> tuple[dict, dict]:
     data, tokens = _whoop_get("/v2/user/measurement/body", tokens)
     return data, tokens
 
+#im not sure if the limit here would work - we need to test out with whoop 
 
 def get_whoop_recovery(tokens: dict, days: int = 2) -> tuple[list, dict]:
     """Returns (list of recovery records newest-first, updated_tokens)."""
-    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
     data, tokens = _whoop_get("/v2/recovery", tokens, params={"start": start, "limit": days})
     records = data.get("records", [])
     return records, tokens
