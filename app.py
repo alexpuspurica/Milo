@@ -190,13 +190,13 @@ st.markdown("---")
 # Feature highlight row — three metrics-style tiles
 st.subheader("Key features")
 f1, f2, f3 = st.columns(3)
-
+#we should put in a variable instead of manual in f3 where it gets updated based on if you have whoop connected
 with f1:
     st.metric(label="ML Model", value="Random Forest",
-              delta="trained on 714 k lifts")
+              delta="Trained on 714 k lifts")
 with f2:
     st.metric(label="Exercise API", value="wger REST",
-              delta="searchable database")
+              delta="Searchable database")
 with f3:
     st.metric(label="Recovery", value="Manual",
               delta="0–100 scale")

@@ -85,8 +85,8 @@ _CSS = """
    ================================================================ */
 
 /* Apply IBM Plex Sans to every element by default */
-html, body, [class*="css"], .stApp, .stMarkdown, p, span, label,
-input, textarea, button, select, [data-testid] {
+html, body, .stApp, .stMarkdown, p, label,
+input, textarea, select {
     font-family: 'IBM Plex Sans', sans-serif !important;
     color: var(--frost);
 }
@@ -96,7 +96,18 @@ input, textarea, button, select, [data-testid] {
     background-color: var(--abyss) !important;
 }
 
-/* Content area — generous padding, capped width for readability */
+/* Rename "app" sidebar nav label to "Welcome" */
+[data-testid="stSidebarNav"] ul li:first-child [data-testid="stSidebarNavLink"] span {
+    font-size: 0 !important;
+    display: block;
+}
+[data-testid="stSidebarNav"] ul li:first-child [data-testid="stSidebarNavLink"] span::before {
+    content: "Welcome";
+    font-size: 0.875rem;
+    display: block;
+}
+
+/* Content area — generous padding */
 .main .block-container {
     padding-top: 2rem !important;
     padding-bottom: 4rem !important;
