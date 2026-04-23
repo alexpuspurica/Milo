@@ -3,7 +3,7 @@ from datetime import datetime
 
 from utils.styles  import inject_styles, sidebar_brand, card, recommendation_card
 from utils.auth    import require_login, render_sidebar_user
-from utils.db      import get_today_workout, get_weekly_plan
+from utils.db      import get_today_workout, get_weekly_plan, get_whoop_tokens, save_whoop_tokens
 from utils.api     import get_whoop_recovery
 from utils.predict import predict_increase
 
@@ -150,13 +150,27 @@ with col_workout:
 with col_recovery:
     st.subheader("Recovery Score")
 
-    whoop_score = get_whoop_recovery(USER_ID)
+    _whoop_tokens = get_whoop_tokens(USER_ID)
+    _whoop_score  = None
 
-    if whoop_score is not None:
-        recovery_for_model = whoop_score
-        recovery_display   = whoop_score
+    if _whoop_tokens:
+        try:
+            records, _whoop_tokens = get_whoop_recovery(_whoop_tokens, days=2)
+            save_whoop_tokens(USER_ID, **{k: _whoop_tokens[k] for k in
+                ("client_id","client_secret","redirect_uri",
+                 "access_token","refresh_token","expires_at")})
+            if records:
+                _whoop_score = int(records[0].get("score", {}).get("recovery_score", 0))
+                st.caption(f"WHOOP recovery score (auto-synced)")
+        except Exception:
+            st.caption("WHOOP connected but sync failed — using manual input.")
+
+    if _whoop_score is not None:
+        recovery_display   = _whoop_score
+        recovery_for_model = _whoop_score
     else:
-        st.caption("WHOOP not connected — enter your recovery score manually.")
+        if _whoop_tokens:
+            st.caption("No recent WHOOP data — enter your score manually.")
         recovery_display = st.slider(
             label="Recovery Score (0–100)",
             min_value=0,
@@ -213,12 +227,6 @@ with col_recovery:
     )
 
     st.markdown("---")
-    st.markdown(
-        "<p style='color:#C4B5DC; font-size:0.78rem;'>"
-        "Connect your WHOOP device in <b>Settings</b> to enable automatic "
-        "recovery tracking.</p>",
-        unsafe_allow_html=True,
-    )
 
 # ---------------------------------------------------------------------------
 # ML Recommendation

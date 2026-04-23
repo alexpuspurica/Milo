@@ -189,8 +189,8 @@ with f2:
     st.metric(label="Exercise API", value="wger REST",
               delta="searchable database")
 with f3:
-    st.metric(label="Recovery", value="WHOOP + Manual",
-              delta="1–10 or 0–100 scale")
+    st.metric(label="Recovery", value="Manual",
+              delta="0–100 scale")
 
 # Friendly onboarding nudge at the bottom
 st.info(

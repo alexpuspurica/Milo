@@ -106,10 +106,14 @@ def init_db() -> None:
             expires_at DATETIME NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS whoop_credentials (
-            user_id  INTEGER PRIMARY KEY,
-            username TEXT NOT NULL,
-            password TEXT NOT NULL
+        CREATE TABLE IF NOT EXISTS whoop_tokens (
+            user_id       INTEGER PRIMARY KEY,
+            client_id     TEXT NOT NULL,
+            client_secret TEXT NOT NULL,
+            redirect_uri  TEXT NOT NULL,
+            access_token  TEXT NOT NULL,
+            refresh_token TEXT,
+            expires_at    REAL
         );
     """)
     conn.commit()
@@ -500,35 +504,54 @@ def delete_session_token(token: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# WHOOP credentials (per-user)
+# WHOOP OAuth tokens (per-user)
 # ---------------------------------------------------------------------------
 
-def save_whoop_credentials(user_id: int, username: str, password: str) -> None:
+def save_whoop_tokens(user_id: int, client_id: str, client_secret: str,
+                      redirect_uri: str, access_token: str,
+                      refresh_token: Optional[str], expires_at: Optional[float]) -> None:
     conn = _get_conn()
     conn.execute(
-        """INSERT INTO whoop_credentials (user_id, username, password)
-           VALUES (?,?,?)
-           ON CONFLICT(user_id) DO UPDATE SET username=excluded.username,
-                                              password=excluded.password""",
-        (user_id, username, password),
+        """INSERT INTO whoop_tokens
+               (user_id, client_id, client_secret, redirect_uri, access_token, refresh_token, expires_at)
+           VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(user_id) DO UPDATE SET
+               client_id=excluded.client_id,
+               client_secret=excluded.client_secret,
+               redirect_uri=excluded.redirect_uri,
+               access_token=excluded.access_token,
+               refresh_token=excluded.refresh_token,
+               expires_at=excluded.expires_at""",
+        (user_id, client_id, client_secret, redirect_uri, access_token, refresh_token, expires_at),
     )
     conn.commit()
     conn.close()
 
 
-def get_whoop_credentials(user_id: int) -> Optional[dict]:
-    """Return {"username", "password"} or None if not set."""
+def get_whoop_tokens(user_id: int) -> Optional[dict]:
     conn = _get_conn()
     row = conn.execute(
-        "SELECT username, password FROM whoop_credentials WHERE user_id=?",
+        """SELECT client_id, client_secret, redirect_uri,
+                  access_token, refresh_token, expires_at
+           FROM whoop_tokens WHERE user_id=?""",
         (user_id,),
     ).fetchone()
     conn.close()
-    return {"username": row[0], "password": row[1]} if row else None
+    if not row:
+        return None
+    return {
+        "client_id":     row[0],
+        "client_secret": row[1],
+        "redirect_uri":  row[2],
+        "access_token":  row[3],
+        "refresh_token": row[4],
+        "expires_at":    row[5],
+    }
 
 
-def delete_whoop_credentials(user_id: int) -> None:
+def delete_whoop_tokens(user_id: int) -> None:
     conn = _get_conn()
-    conn.execute("DELETE FROM whoop_credentials WHERE user_id=?", (user_id,))
+    conn.execute("DELETE FROM whoop_tokens WHERE user_id=?", (user_id,))
     conn.commit()
     conn.close()
+

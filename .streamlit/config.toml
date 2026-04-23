@@ -20,5 +20,5 @@ textColor              = "#F2EBFF"   # Frost — all body text
 font                   = "sans serif"
 
 [server]
-# Suppress the "Running on local URL" banner in the terminal
 headless = false
+port = 8501

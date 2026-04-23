@@ -1,26 +1,26 @@
 """
 utils/api.py — External API helpers
 =====================================
-This module handles all outbound HTTP calls to third-party services:
+This module handles outbound HTTP calls to third-party services:
 
 1. **wger Exercise API** (https://wger.de/api/v2/)
    Open-source exercise database.  No authentication required for read-only
    endpoints.  Used on the Settings page to let users search for exercises by
    name and retrieve muscle group / category metadata.
 
-2. **WHOOP API** (https://developer.whoop.com/)
-   Returns the user's latest recovery score (0–100) as measured by their
-   WHOOP wearable device.  Access requires OAuth2 approval which is pending
-   for this project; until then, `get_whoop_recovery` returns None so the UI
-   falls back to the manual recovery slider.
-
-Both functions return **hardcoded fake data** for now so the UI can be built
-and tested without live network access.  Replace the return statements with
-real `requests` calls when credentials / network access is available.
-
-Dependencies (add to requirements.txt when implementing):
-    requests
+2. **WHOOP API** (https://developer.whoop.com/api/)
+   OAuth2 authorization code flow. Provides profile, body measurements, and
+   recovery scores. Tokens are stored in the database and auto-refreshed.
 """
+
+import time
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
+
+WHOOP_BASE      = "https://api.prod.whoop.com/developer"
+WHOOP_AUTH_URL  = "https://api.prod.whoop.com/oauth/oauth2/auth"
+WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
+WHOOP_SCOPES    = "read:profile read:body_measurement read:recovery"
 
 
 # ---------------------------------------------------------------------------
@@ -60,43 +60,93 @@ def search_exercises(query: str) -> list:
 
 
 # ---------------------------------------------------------------------------
-# WHOOP API
+# WHOOP OAuth2
 # ---------------------------------------------------------------------------
 
-def get_whoop_recovery(user_id: int):
-    """
-    Fetch the user's most recent WHOOP recovery score.
+def get_whoop_auth_url(client_id: str, redirect_uri: str) -> str:
+    params = {
+        "client_id":     client_id,
+        "redirect_uri":  redirect_uri,
+        "scope":         WHOOP_SCOPES,
+        "response_type": "code",
+    }
+    return f"{WHOOP_AUTH_URL}?{urlencode(params)}"
 
-    WHOOP recovery scores range from 0 (very poor) to 100 (peak readiness).
-    In Milo, this score is passed to `utils/predict.predict_increase()` as a
-    feature so the ML model can account for fatigue when making its
-    recommendation.
 
-    Parameters
-    ----------
-    user_id : int
-        The Milo user ID.  Used to look up the stored WHOOP OAuth2 token for
-        this user (tokens will be stored encrypted in the database).
+def exchange_whoop_code(client_id: str, client_secret: str,
+                        code: str, redirect_uri: str) -> dict:
+    import requests
+    resp = requests.post(
+        WHOOP_TOKEN_URL,
+        data={
+            "grant_type":    "authorization_code",
+            "code":          code,
+            "client_id":     client_id,
+            "client_secret": client_secret,
+            "redirect_uri":  redirect_uri,
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
-    Returns
-    -------
-    int | None
-        Recovery score (0–100) if the WHOOP API is available and the user
-        has connected their device.  Returns None if the API is unavailable,
-        the user has not connected WHOOP, or the token has expired — so the
-        caller can fall back to the manual slider.
 
-    Notes
-    -----
-    Real implementation (requires WHOOP API approval):
-        1. Load the user's stored OAuth2 access token from the database.
-        2. GET https://api.prod.whoop.com/developer/v1/recovery/
-           with Authorization: Bearer <token>
-        3. Parse response["records"][0]["score"]["recovery_score"]
-        4. Handle 401 (refresh token) and 403 (not connected) gracefully.
+def _refresh_if_needed(tokens: dict) -> dict:
+    """Return tokens, refreshing the access token if it expires within 60 s."""
+    import requests
+    expires_at = tokens.get("expires_at") or 0
+    if time.time() < expires_at - 60:
+        return tokens
+    resp = requests.post(
+        WHOOP_TOKEN_URL,
+        data={
+            "grant_type":    "refresh_token",
+            "refresh_token": tokens["refresh_token"],
+            "client_id":     tokens["client_id"],
+            "client_secret": tokens["client_secret"],
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    tokens["access_token"]  = data["access_token"]
+    tokens["refresh_token"] = data.get("refresh_token", tokens["refresh_token"])
+    tokens["expires_at"]    = time.time() + data.get("expires_in", 3600)
+    return tokens
 
-    WHOOP developer docs: https://developer.whoop.com/
-    """
-    # --- STUB: return None to signal "WHOOP not connected" ---
-    # The Overview page will show the manual recovery slider in this case.
-    return None
+
+def _whoop_get(path: str, tokens: dict, params: dict = None):
+    import requests
+    tokens = _refresh_if_needed(tokens)
+    resp = requests.get(
+        f"{WHOOP_BASE}{path}",
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+        params=params,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json(), tokens
+
+
+# ---------------------------------------------------------------------------
+# WHOOP data endpoints
+# ---------------------------------------------------------------------------
+
+def get_whoop_profile(tokens: dict) -> tuple[dict, dict]:
+    """Returns (profile_dict, updated_tokens)."""
+    data, tokens = _whoop_get("/v2/user/profile/basic", tokens)
+    return data, tokens
+
+
+def get_whoop_body_measurement(tokens: dict) -> tuple[dict, dict]:
+    """Returns (body_dict, updated_tokens). Keys: height_meter, weight_kilogram, max_heart_rate."""
+    data, tokens = _whoop_get("/v2/user/measurement/body", tokens)
+    return data, tokens
+
+
+def get_whoop_recovery(tokens: dict, days: int = 2) -> tuple[list, dict]:
+    """Returns (list of recovery records newest-first, updated_tokens)."""
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    data, tokens = _whoop_get("/v2/recovery", tokens, params={"start": start, "limit": days})
+    records = data.get("records", [])
+    return records, tokens

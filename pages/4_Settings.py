@@ -9,9 +9,13 @@ from utils.db     import (
     get_weekly_plan, save_weekly_plan,
     get_all_exercises, save_plan_exercise,
     get_all_plan_exercises,
-    get_whoop_credentials, save_whoop_credentials, delete_whoop_credentials,
+    get_whoop_tokens, save_whoop_tokens, delete_whoop_tokens,
 )
-from utils.api    import search_exercises
+from utils.api    import (
+    search_exercises,
+    get_whoop_auth_url, exchange_whoop_code,
+    get_whoop_profile, get_whoop_body_measurement, get_whoop_recovery,
+)
 
 inject_styles()
 sidebar_brand()
@@ -348,52 +352,80 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # SECTION E: WHOOP Connection
 # ---------------------------------------------------------------------------
+import time
+
+_WHOOP_CFG = st.secrets.get("whoop", {})
+_WHOOP_CLIENT_ID     = _WHOOP_CFG.get("client_id", "")
+_WHOOP_CLIENT_SECRET = _WHOOP_CFG.get("client_secret", "")
+_WHOOP_REDIRECT_URI  = _WHOOP_CFG.get("redirect_uri", "")
+
 st.markdown("---")
 st.subheader("WHOOP Connection")
 st.markdown(
     "<p style='color:#C4B5DC; font-size:0.88rem; margin-bottom:1rem;'>"
-    "Connect your WHOOP account to enable automatic recovery tracking on the Overview page.</p>",
+    "Connect your WHOOP account to automatically sync your recovery score, "
+    "profile, and body measurements.</p>",
     unsafe_allow_html=True,
 )
 
-_stored = get_whoop_credentials(USER_ID) or {"username": "", "password": ""}
-_connected = bool(_stored["username"])
+_tokens = get_whoop_tokens(USER_ID)
 
-if _connected:
-    st.success(f"Connected as **{_stored['username']}**")
-else:
-    st.warning("Not connected — recovery score must be entered manually.")
+# --- Handle OAuth callback (code in URL) ---
+_qp = st.query_params
+if "code" in _qp and not _tokens:
+    _code = _qp["code"]
+    with st.spinner("Connecting to WHOOP…"):
+        try:
+            _tok_data = exchange_whoop_code(
+                _WHOOP_CLIENT_ID, _WHOOP_CLIENT_SECRET, _code, _WHOOP_REDIRECT_URI
+            )
+            save_whoop_tokens(
+                USER_ID,
+                client_id=_WHOOP_CLIENT_ID,
+                client_secret=_WHOOP_CLIENT_SECRET,
+                redirect_uri=_WHOOP_REDIRECT_URI,
+                access_token=_tok_data["access_token"],
+                refresh_token=_tok_data.get("refresh_token"),
+                expires_at=time.time() + _tok_data.get("expires_in", 3600),
+            )
+            st.query_params.clear()
+            st.success("WHOOP connected successfully!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Connection failed: {e}")
 
-with st.form("whoop_form"):
-    whoop_email = st.text_input(
-        "WHOOP Email",
-        value=_stored["username"],
-        placeholder="you@example.com",
-    )
-    whoop_password = st.text_input(
-        "WHOOP Password",
-        type="password",
-        placeholder="Leave blank to keep existing password" if _connected else "Enter your WHOOP password",
-    )
-    col_save, col_clear = st.columns([3, 1])
-    with col_save:
-        save_whoop = st.form_submit_button("Save Credentials", use_container_width=True)
-    with col_clear:
-        clear_whoop = st.form_submit_button("Disconnect", use_container_width=True)
+# --- Show status & controls ---
+if _tokens:
+    st.success("WHOOP is connected.")
 
-if save_whoop:
-    if not whoop_email:
-        st.error("Please enter your WHOOP email.")
-    else:
-        password_to_save = whoop_password if whoop_password else _stored["password"]
-        if not password_to_save:
-            st.error("Please enter your WHOOP password.")
-        else:
-            save_whoop_credentials(USER_ID, whoop_email.strip(), password_to_save)
-            st.success("WHOOP credentials saved. Recovery will sync automatically on the Overview page.")
+    col_data, col_disc = st.columns([3, 1])
+    with col_data:
+        if st.button("Fetch latest WHOOP data", use_container_width=True):
+            try:
+                profile,  _tokens = get_whoop_profile(_tokens)
+                body,     _tokens = get_whoop_body_measurement(_tokens)
+                recovery, _tokens = get_whoop_recovery(_tokens, days=2)
+                save_whoop_tokens(USER_ID, **{k: _tokens[k] for k in
+                    ("client_id","client_secret","redirect_uri",
+                     "access_token","refresh_token","expires_at")})
+                st.markdown("**Profile**")
+                st.json(profile)
+                st.markdown("**Body Measurements**")
+                st.json(body)
+                st.markdown("**Recovery (last 2 days)**")
+                st.json(recovery)
+            except Exception as e:
+                st.error(f"Failed to fetch WHOOP data: {e}")
+    with col_disc:
+        if st.button("Disconnect", use_container_width=True):
+            delete_whoop_tokens(USER_ID)
+            st.success("WHOOP disconnected.")
             st.rerun()
 
-if clear_whoop:
-    delete_whoop_credentials(USER_ID)
-    st.success("WHOOP disconnected.")
-    st.rerun()
+else:
+    st.warning("Not connected — recovery score will be entered manually on the Overview page.")
+    if _WHOOP_CLIENT_ID:
+        _auth_url = get_whoop_auth_url(_WHOOP_CLIENT_ID, _WHOOP_REDIRECT_URI)
+        st.link_button("Connect WHOOP Account", _auth_url, use_container_width=True)
+    else:
+        st.error("WHOOP API credentials are not configured. Contact the administrator.")
