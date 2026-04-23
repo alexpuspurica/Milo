@@ -193,7 +193,7 @@ f1, f2, f3 = st.columns(3)
 #we should put in a variable instead of manual in f3 where it gets updated based on if you have whoop connected
 with f1:
     st.metric(label="ML Model", value="Random Forest",
-              delta="Trained on 714 k lifts")
+              delta="Trained on 714k lifts")
 with f2:
     st.metric(label="Exercise API", value="wger REST",
               delta="Searchable database")
