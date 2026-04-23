@@ -389,12 +389,13 @@ if "code" in _qp and not _tokens:
                 expires_at=time.time() + _tok_data.get("expires_in", 3600),
             )
             st.query_params.clear()
-            st.success("WHOOP connected successfully!")
+            _tokens = get_whoop_tokens(USER_ID)
             st.rerun()
         except Exception as e:
             st.error(f"Connection failed: {e}")
 
 # --- Show status & controls ---
+_tokens = get_whoop_tokens(USER_ID)
 if _tokens:
     st.success("WHOOP is connected.")
 

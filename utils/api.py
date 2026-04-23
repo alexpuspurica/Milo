@@ -152,7 +152,7 @@ def get_whoop_body_measurement(tokens: dict) -> tuple[dict, dict]:
 
 def get_whoop_recovery(tokens: dict, days: int = 2) -> tuple[list, dict]:
     """Returns (list of recovery records newest-first, updated_tokens)."""
-    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
-    data, tokens = _whoop_get("/v2/recovery", tokens, params={"start": start, "limit": days})
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    data, tokens = _whoop_get("/v2/recovery", tokens, params={"start": start})
     records = data.get("records", [])
     return records, tokens

@@ -162,8 +162,8 @@ with col_recovery:
             if records:
                 _whoop_score = int(records[0].get("score", {}).get("recovery_score", 0))
                 st.caption(f"WHOOP recovery score (auto-synced)")
-        except Exception:
-            st.caption("WHOOP connected but sync failed — using manual input.")
+        except Exception as e:
+            st.caption(f"WHOOP sync failed ({e}) — using manual input.")
 
     if _whoop_score is not None:
         recovery_display   = _whoop_score
