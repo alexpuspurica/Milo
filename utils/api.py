@@ -7,7 +7,7 @@ This module handles outbound HTTP calls to third-party services:
    Open-source exercise database.  No authentication required for read-only
    endpoints.  Used on the Settings page to let users search for exercises by
    name and retrieve muscle group / category metadata.
-
+#Get rid of profile and body measurements
 2. **WHOOP API** (https://developer.whoop.com/api/)
    OAuth2 authorization code flow. Provides profile, body measurements, and
    recovery scores. Tokens are stored in the database and auto-refreshed.
@@ -18,10 +18,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
-WHOOP_BASE      = "https://api.prod.whoop.com/developer"
-WHOOP_AUTH_URL  = "https://api.prod.whoop.com/oauth/oauth2/auth"
-WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
-WHOOP_SCOPES    = "read:recovery"
+#WHOOP_BASE      = "https://api.prod.whoop.com/developer"
+#WHOOP_AUTH_URL  = "https://api.prod.whoop.com/oauth/oauth2/auth"
+#WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
+#WHOOP_SCOPES    = "read:recovery"
 
 
 # ---------------------------------------------------------------------------
@@ -35,6 +35,7 @@ def search_exercises(query: str) -> list:
     Returns list of dicts with keys: id, name, muscle_group, category.
     Falls back to an empty list on any network or parse error.
     """
+    #shouldn't this import be at the start of the script? Or does this have to be in every def
     import requests
 
     try:
@@ -69,18 +70,18 @@ def get_whoop_auth_url(client_id: str, redirect_uri: str) -> tuple[str, str]:
     params = {
         "client_id":     client_id,
         "redirect_uri":  redirect_uri,
-        "scope":         WHOOP_SCOPES,
+        "scope":         "read:recovery",
         "response_type": "code",
         "state":         state,
     }
-    return f"{WHOOP_AUTH_URL}?{urlencode(params)}", state
+    return f"{"https://api.prod.whoop.com/oauth/oauth2/auth"}?{urlencode(params)}", state
 
 
 def exchange_whoop_code(client_id: str, client_secret: str,
                         code: str, redirect_uri: str) -> dict:
     import requests
     resp = requests.post(
-        WHOOP_TOKEN_URL,
+        "https://api.prod.whoop.com/oauth/oauth2/token",
         data={
             "grant_type":    "authorization_code",
             "code":          code,
@@ -101,7 +102,7 @@ def _refresh_if_needed(tokens: dict) -> dict:
     if time.time() < expires_at - 60:
         return tokens
     resp = requests.post(
-        WHOOP_TOKEN_URL,
+        "https://api.prod.whoop.com/oauth/oauth2/token",
         data={
             "grant_type":    "refresh_token",
             "refresh_token": tokens["refresh_token"],
@@ -122,7 +123,7 @@ def _whoop_get(path: str, tokens: dict, params: dict = None):
     import requests
     tokens = _refresh_if_needed(tokens)
     resp = requests.get(
-        f"{WHOOP_BASE}{path}",
+        f"{"https://api.prod.whoop.com/developer"}{path}",
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
         params=params,
         timeout=10,
@@ -147,7 +148,7 @@ def get_whoop_body_measurement(tokens: dict) -> tuple[dict, dict]:
     data, tokens = _whoop_get("/v2/user/measurement/body", tokens)
     return data, tokens
 
-#im not sure if the limit here would work - we need to test out with whoop 
+#im not sure if the limit here would work - we need to test out with whoop (might be start and end date)
 
 def get_whoop_recovery(tokens: dict, days: int = 2) -> tuple[list, dict]:
     """Returns (list of recovery records newest-first, updated_tokens)."""
