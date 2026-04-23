@@ -28,7 +28,7 @@ try:
     with open(_FEATURES_PATH, "rb") as _f:
         _feature_cols: list = pickle.load(_f)
     _MODEL_LOADED = True
-except FileNotFoundError:
+except Exception:
     _model        = None
     _feature_cols = []
     _MODEL_LOADED = False
