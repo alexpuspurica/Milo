@@ -16,6 +16,9 @@ def require_login() -> None:
     _cookies = CookieController()
     if st.session_state.get("logged_in"):
         return
+    if "_cookies_ready" not in st.session_state:
+        st.session_state["_cookies_ready"] = True
+        st.rerun()
     token = _cookies.get("milo_session")
     if token:
         user = validate_session_token(token)

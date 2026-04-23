@@ -59,6 +59,12 @@ sidebar_brand()
 # ---------------------------------------------------------------------------
 _cookies = CookieController()
 if not st.session_state.get("logged_in"):
+    # CookieController reads cookies via JS; on the very first render after a
+    # page reload that JS hasn't run yet and get() returns None. One rerun
+    # gives it time to deliver the cookie value.
+    if "_cookies_ready" not in st.session_state:
+        st.session_state["_cookies_ready"] = True
+        st.rerun()
     _token = _cookies.get("milo_session")
     if _token:
         _user = validate_session_token(_token)
