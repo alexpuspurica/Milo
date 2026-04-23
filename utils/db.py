@@ -28,7 +28,8 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 _MODULE_DIR   = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_MODULE_DIR)
-_DB_PATH      = os.path.join(_PROJECT_ROOT, "milo.db")
+_DEFAULT_PATH = os.path.join(_PROJECT_ROOT, "milo.db")
+_DB_PATH      = _DEFAULT_PATH if os.access(_PROJECT_ROOT, os.W_OK) else "/tmp/milo.db"
 
 
 def _get_conn() -> sqlite3.Connection:

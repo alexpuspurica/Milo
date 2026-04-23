@@ -425,7 +425,8 @@ if _tokens:
 else:
     st.warning("Not connected — recovery score will be entered manually on the Overview page.")
     if _WHOOP_CLIENT_ID:
-        _auth_url = get_whoop_auth_url(_WHOOP_CLIENT_ID, _WHOOP_REDIRECT_URI)
+        _auth_url, _state = get_whoop_auth_url(_WHOOP_CLIENT_ID, _WHOOP_REDIRECT_URI)
+        st.session_state["whoop_oauth_state"] = _state
         st.link_button("Connect WHOOP Account", _auth_url, use_container_width=True)
     else:
         st.error("WHOOP API credentials are not configured. Contact the administrator.")

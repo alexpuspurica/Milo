@@ -14,13 +14,14 @@ This module handles outbound HTTP calls to third-party services:
 """
 
 import time
+import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 WHOOP_BASE      = "https://api.prod.whoop.com/developer"
 WHOOP_AUTH_URL  = "https://api.prod.whoop.com/oauth/oauth2/auth"
 WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
-WHOOP_SCOPES    = "read:profile read:body_measurement read:recovery"
+WHOOP_SCOPES    = "read:recovery"
 
 
 # ---------------------------------------------------------------------------
@@ -63,14 +64,16 @@ def search_exercises(query: str) -> list:
 # WHOOP OAuth2
 # ---------------------------------------------------------------------------
 
-def get_whoop_auth_url(client_id: str, redirect_uri: str) -> str:
+def get_whoop_auth_url(client_id: str, redirect_uri: str) -> tuple[str, str]:
+    state = secrets.token_urlsafe(16)
     params = {
         "client_id":     client_id,
         "redirect_uri":  redirect_uri,
         "scope":         WHOOP_SCOPES,
         "response_type": "code",
+        "state":         state,
     }
-    return f"{WHOOP_AUTH_URL}?{urlencode(params)}"
+    return f"{WHOOP_AUTH_URL}?{urlencode(params)}", state
 
 
 def exchange_whoop_code(client_id: str, client_secret: str,
